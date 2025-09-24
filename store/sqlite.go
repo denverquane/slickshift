@@ -38,25 +38,25 @@ func (s *Sqlite) UserExists(userID string) bool {
 	return s.exists("users", "id", userID)
 }
 
-func (s *Sqlite) AddUser(userID string, platform string) error {
+func (s *Sqlite) AddUser(userID string, platform Platform) error {
 	t := time.Now().Unix()
 	_, err := s.db.Exec("INSERT INTO users (id, platform, updated_unix) VALUES (?, ?, ?)", userID, platform, t)
 	return err
 }
 
-func (s *Sqlite) SetUserPlatform(userID string, platform string) error {
+func (s *Sqlite) SetUserPlatform(userID string, platform Platform) error {
 	t := time.Now().Unix()
 	_, err := s.db.Exec("INSERT INTO users (id, platform, updated_unix) VALUES (?, ?, ?) ON CONFLICT (id) DO UPDATE SET platform = excluded.platform, updated_unix = excluded.updated_unix", userID, platform, t)
 	return err
 }
 
-func (s *Sqlite) SetUserCookie(userID string, cookie string) error {
+func (s *Sqlite) EncryptAndSetUserCookie(userID string, cookie string) error {
 	t := time.Now().Unix()
 	_, err := s.db.Exec("INSERT INTO user_cookies (user_id, cookie, updated_unix) VALUES (?, ?, ?) ON CONFLICT (user_id) DO UPDATE SET cookie = excluded.cookie, updated_unix = excluded.updated_unix", userID, cookie, t)
 	return err
 }
 
-func (s *Sqlite) GetUserCookie(userID string) (string, error) {
+func (s *Sqlite) GetDecryptedUserCookie(userID string) (string, error) {
 	var cookie string
 	err := s.db.QueryRow("SELECT cookie FROM user_cookies WHERE user_id=?", userID).Scan(&cookie)
 	if err != nil {

@@ -6,6 +6,7 @@ import (
 
 const (
 	HELP     = "help"
+	SECURITY = "security"
 	PLATFORM = "platform"
 	LOGIN    = "login"
 )
@@ -27,6 +28,10 @@ var AllCommands = []*discordgo.ApplicationCommand{
 				Options:     []*discordgo.ApplicationCommandOption{},
 			},
 		},
+	},
+	{
+		Name:        SECURITY,
+		Description: "View information on how SlickShift securely handles your credentials and data",
 	},
 	{
 		Name:        LOGIN,

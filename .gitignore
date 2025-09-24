@@ -13,6 +13,8 @@
 
 .env
 
+.idea/
+
 # goreleaser distribution directory
 dist
 

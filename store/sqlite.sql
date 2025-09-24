@@ -27,7 +27,7 @@ CREATE TABLE IF NOT EXISTS redemptions (
     code CHAR(29) NOT NULL,
     user_id BIG INT NOT NULL,
     platform TEXT NOT NULL,
-    success INT NOT NULL,
+    status TEXT NOT NULL,
 
     time_unix BIG INT NOT NULL,
 

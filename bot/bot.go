@@ -71,8 +71,27 @@ func (bot *Bot) getSlashResponse(s *discordgo.Session, i *discordgo.InteractionC
 	if i.Type == discordgo.InteractionApplicationCommand {
 		switch i.ApplicationCommandData().Name {
 		case HELP:
-			fallthrough
+			return &discordgo.InteractionResponse{
+				Type: discordgo.InteractionResponseChannelMessageWithSource,
+				Data: &discordgo.InteractionResponseData{
+					Flags: PrivateResponse,
+					Content: "SlickShift is a bot that can redeem Borderlands 4 SHiFT codes for you!\n\n" +
+						"Use `/login` to provide your SHiFT credentials to begin the process.\n" +
+						"Use `/security` if you'd like more details on how your credentials are used for SlickShift to function.\n" +
+						"Use `/platform` if you'd like to view or change the platform on which SlickShift will redeem codes for you.",
+				},
+			}
+		case SECURITY:
+			// TODO
+			return &discordgo.InteractionResponse{
+				Type: discordgo.InteractionResponseChannelMessageWithSource,
+				Data: &discordgo.InteractionResponseData{
+					Flags:   PrivateResponse,
+					Content: "Super secure, bro. Trust.",
+				},
+			}
 		case PLATFORM:
+			// TODO
 			return &discordgo.InteractionResponse{
 				Type: discordgo.InteractionResponseChannelMessageWithSource,
 				Data: &discordgo.InteractionResponseData{
@@ -137,30 +156,35 @@ func (bot *Bot) getSlashResponse(s *discordgo.Session, i *discordgo.InteractionC
 		id := i.MessageComponentData().CustomID
 		if strings.HasPrefix(id, SetPlatformPrefix) {
 			id = strings.TrimPrefix(id, SetPlatformPrefix)
-			var setPlat string
+			var setPlat store.Platform
 			switch id {
 			case "steam":
-				setPlat = "steam"
+				setPlat = store.STEAM
 			case "xbox":
-				setPlat = "xbox"
+				setPlat = store.XBOX
 			case "playstation":
-				setPlat = "playstation"
+				setPlat = store.PLAYSTATION
+			case "epic":
+				setPlat = store.EPIC
 			}
-			if setPlat != "" {
-				err := bot.storage.AddUser(i.Member.User.ID, setPlat)
-				if err != nil {
-					log.Println(err)
-					return nil
-				}
-				return &discordgo.InteractionResponse{
-					Type: discordgo.InteractionResponseChannelMessageWithSource,
-					Data: &discordgo.InteractionResponseData{
-						Flags: PrivateResponse,
-						Content: "Success!\nThe next step is to setup authentication with SHiFT so that I " +
-							"can redeem codes for you automatically in the future!\n\n" +
-							"At present, the only method for login is by providing your email/password directly with `/login`",
-					},
-				}
+			if setPlat == "" {
+				log.Println("Unrecognized platform found:", id)
+				return nil
+			}
+
+			err := bot.storage.AddUser(i.Member.User.ID, setPlat)
+			if err != nil {
+				log.Println(err)
+				return nil
+			}
+			return &discordgo.InteractionResponse{
+				Type: discordgo.InteractionResponseChannelMessageWithSource,
+				Data: &discordgo.InteractionResponseData{
+					Flags: PrivateResponse,
+					Content: "Success!\nThe next step is to setup authentication with SHiFT so that I " +
+						"can redeem codes for you automatically in the future!\n\n" +
+						"At present, the only method for login is by providing your email/password directly with `/login`",
+				},
 			}
 		}
 
@@ -176,7 +200,8 @@ func unregisteredUserResponse() *discordgo.InteractionResponse {
 			Flags: PrivateResponse,
 			Content: "Looks like this is your first time using SlickShift! Welcome!\n\n" +
 				"I'm here to help you automatically redeem SHiFT codes for Borderlands 4!\n\n" +
-				"To start, can you tell me what platform you'll want to redeem SHiFT codes for?",
+				"To start, can you tell me what platform you'll want to redeem SHiFT codes for?\n" +
+				"(You can always change this later with `/platform`)",
 			Components: []discordgo.MessageComponent{
 				discordgo.ActionsRow{
 					Components: []discordgo.MessageComponent{
@@ -187,6 +212,14 @@ func unregisteredUserResponse() *discordgo.InteractionResponse {
 							//	Name: ,
 							//},
 							CustomID: SetPlatformPrefix + "steam",
+						},
+						discordgo.Button{
+							Label: "Epic",
+							Style: discordgo.PrimaryButton,
+							//Emoji: &discordgo.ComponentEmoji{
+							//	Name: ,
+							//},
+							CustomID: SetPlatformPrefix + "epic",
 						},
 						discordgo.Button{
 							Label: "Xbox",
@@ -202,7 +235,7 @@ func unregisteredUserResponse() *discordgo.InteractionResponse {
 							//Emoji: &discordgo.ComponentEmoji{
 							//	Name: ,
 							//},
-							CustomID: SetPlatformPrefix + "ps",
+							CustomID: SetPlatformPrefix + "playstation",
 						},
 					},
 				},
