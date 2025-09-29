@@ -1,24 +1,25 @@
 CREATE TABLE IF NOT EXISTS users (
     id UNSIGNED BIG INT PRIMARY KEY,
     platform TEXT NOT NULL,
+    should_dm BOOLEAN,
     updated_unix BIG INT
 );
 
 CREATE TABLE IF NOT EXISTS user_cookies (
     user_id UNSIGNED BIG INT PRIMARY KEY,
-    cookie TEXT NOT NULL,
-    updated_unix BIG INT,
+    encrypted_cookie_json TEXT NOT NULL,
+    updated_unix BIG INT NOT NULL,
 
     FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE
 );
 
 CREATE TABLE IF NOT EXISTS shift_codes (
-    code CHAR[29] PRIMARY KEY,
+    code CHAR(29) PRIMARY KEY,
+    game TEXT NOT NULL,
     reward TEXT,
     source TEXT, -- where the code was sourced, if not by a user (twitter, instagram, etc)
     user_id BIG INT, -- who added/registered the code
     added_unix BIG INT NOT NULL,
-    redeemed_unix BIG INT, -- last time the code was successfully redeemed
 
     FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE SET NULL
 );

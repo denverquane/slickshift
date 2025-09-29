@@ -3,10 +3,13 @@ package store
 import (
 	"database/sql"
 	_ "embed"
+	"encoding/json"
 	"fmt"
 	"log"
+	"net/http"
 	"time"
-
+	
+	"github.com/denverquane/slickshift/shift"
 	_ "modernc.org/sqlite"
 )
 
@@ -14,10 +17,11 @@ import (
 var schema string
 
 type Sqlite struct {
-	db *sql.DB
+	db        *sql.DB
+	encryptor *Encryptor
 }
 
-func NewSqliteStore(filepath string) (Store, error) {
+func NewSqliteStore(filepath string, encryptor *Encryptor) (Store, error) {
 	db, err := sql.Open("sqlite", filepath)
 	if err != nil {
 		return nil, err
@@ -31,43 +35,192 @@ func NewSqliteStore(filepath string) (Store, error) {
 		return nil, err
 	}
 
-	return &Sqlite{db: db}, nil
+	return &Sqlite{db: db, encryptor: encryptor}, nil
 }
 
 func (s *Sqlite) UserExists(userID string) bool {
 	return s.exists("users", "id", userID)
 }
 
-func (s *Sqlite) AddUser(userID string, platform Platform) error {
+func (s *Sqlite) AddUser(userID, platform string, dm bool) error {
 	t := time.Now().Unix()
-	_, err := s.db.Exec("INSERT INTO users (id, platform, updated_unix) VALUES (?, ?, ?)", userID, platform, t)
+	_, err := s.db.Exec("INSERT INTO users (id, platform, should_dm, updated_unix) VALUES (?, ?, ?, ?)", userID, platform, dm, t)
 	return err
 }
 
-func (s *Sqlite) SetUserPlatform(userID string, platform Platform) error {
+func (s *Sqlite) SetUserDM(userID string, dm bool) error {
+	t := time.Now().Unix()
+	_, err := s.db.Exec("UPDATE users SET should_dm = ?, updated_unix = ? WHERE id = ?", dm, t, userID)
+	return err
+}
+
+func (s *Sqlite) GetUserDM(userID string) (bool, error) {
+	var value bool
+	err := s.db.QueryRow("SELECT should_dm FROM users WHERE id = ?", userID).Scan(&value)
+	if err != nil {
+		return false, err
+	}
+	return value, nil
+}
+
+func (s *Sqlite) SetUserPlatform(userID, platform string) error {
 	t := time.Now().Unix()
 	_, err := s.db.Exec("INSERT INTO users (id, platform, updated_unix) VALUES (?, ?, ?) ON CONFLICT (id) DO UPDATE SET platform = excluded.platform, updated_unix = excluded.updated_unix", userID, platform, t)
 	return err
 }
 
-func (s *Sqlite) EncryptAndSetUserCookie(userID string, cookie string) error {
+func (s *Sqlite) GetUserPlatform(userID string) (string, error) {
+	var platform string
+	err := s.db.QueryRow("SELECT platform FROM users WHERE id = ?", userID).Scan(&platform)
+	if err != nil {
+		return "", err
+	}
+	return platform, nil
+}
+
+func (s *Sqlite) EncryptAndSetUserCookies(userID string, cookies []*http.Cookie) error {
+	cookieJson, err := json.Marshal(cookies)
+	if err != nil {
+		return err
+	}
+	encrypted, err := s.encryptor.Encrypt(string(cookieJson))
+	if err != nil {
+		return err
+	}
 	t := time.Now().Unix()
-	_, err := s.db.Exec("INSERT INTO user_cookies (user_id, cookie, updated_unix) VALUES (?, ?, ?) ON CONFLICT (user_id) DO UPDATE SET cookie = excluded.cookie, updated_unix = excluded.updated_unix", userID, cookie, t)
+	_, err = s.db.Exec("INSERT INTO user_cookies (user_id, encrypted_cookie_json, updated_unix) VALUES (?, ?, ?) ON CONFLICT (user_id) DO UPDATE SET encrypted_cookie_json = excluded.encrypted_cookie_json, updated_unix = excluded.updated_unix", userID, encrypted, t)
 	return err
 }
 
-func (s *Sqlite) GetDecryptedUserCookie(userID string) (string, error) {
-	var cookie string
-	err := s.db.QueryRow("SELECT cookie FROM user_cookies WHERE user_id=?", userID).Scan(&cookie)
+func (s *Sqlite) GetDecryptedUserCookies(userID string) ([]*http.Cookie, error) {
+	var cipherText string
+	err := s.db.QueryRow("SELECT encrypted_cookie_json FROM user_cookies WHERE user_id=?", userID).Scan(&cipherText)
 	if err != nil {
-		return "", nil
+		return nil, err
 	}
-	return cookie, nil
+	cookieJson, err := s.encryptor.Decrypt(cipherText)
+	if err != nil {
+		return nil, err
+	}
+	var cookies []*http.Cookie
+	err = json.Unmarshal([]byte(cookieJson), &cookies)
+	if err != nil {
+		return nil, err
+	}
+	return cookies, nil
 }
 
-func (s *Sqlite) AddCode(code string, userID *string, source *string) error {
+func (s *Sqlite) AddCode(code, game string, userID *string, source *string) error {
 	t := time.Now().Unix()
-	_, err := s.db.Exec("INSERT INTO shift_codes (code, user_id, source, added_unix) VALUES (?, ?, ?, ?)", code, userID, source, t)
+	_, err := s.db.Exec("INSERT OR IGNORE INTO shift_codes (code, game, user_id, source, added_unix) VALUES (?, ?, ?, ?, ?)", code, game, userID, source, t)
+	return err
+}
+
+func (s *Sqlite) SetCodeRewardIfNotSet(code, reward string) (bool, error) {
+	res, err := s.db.Exec("UPDATE shift_codes SET reward = ? WHERE code = ? AND reward IS NULL", reward, code)
+	if err != nil {
+		return false, err
+	}
+	n, err := res.RowsAffected()
+	if err != nil {
+		return false, err
+	}
+	return n == 1, nil
+}
+
+func (s *Sqlite) GetCodesNotRedeemedForUser(userID, platform string) ([]string, error) {
+	rows, err := s.db.Query("SELECT sc.code FROM shift_codes sc WHERE NOT EXISTS (SELECT 1 FROM redemptions r WHERE r.code = sc.code AND r.user_id = ? AND r.platform = ?)", userID, platform)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var codes []string
+	for rows.Next() {
+		var code string
+		err = rows.Scan(&code)
+		if err != nil {
+			return nil, err
+		}
+		codes = append(codes, code)
+	}
+	return codes, nil
+}
+
+func (s *Sqlite) GetAllUserCookies() ([]UserCookies, error) {
+	rows, err := s.db.Query("SELECT user_id, encrypted_cookie_json FROM user_cookies")
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var userCookies []UserCookies
+	for rows.Next() {
+		var userID string
+		var cipherText string
+		err = rows.Scan(&userID, &cipherText)
+		if err != nil {
+			return nil, err
+		}
+		cookieJson, err := s.encryptor.Decrypt(cipherText)
+		if err != nil {
+			return nil, err
+		}
+		var cookies []*http.Cookie
+		err = json.Unmarshal([]byte(cookieJson), &cookies)
+		if err != nil {
+			return nil, err
+		}
+		userCookies = append(userCookies, UserCookies{
+			UserID:  userID,
+			Cookies: cookies,
+		})
+	}
+	return userCookies, nil
+}
+
+func (s *Sqlite) RecentRedemptionsForUser(userID string, quantity int) ([]Redemption, error) {
+	if quantity <= 0 {
+		return nil, nil
+	}
+	query := fmt.Sprintf("SELECT code, platform, status, time_unix FROM redemptions WHERE user_id = ? ORDER BY time_unix DESC LIMIT %d", quantity)
+	rows, err := s.db.Query(query, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	return scanRedemptions(rows)
+}
+
+func (s *Sqlite) RecentSuccessfulRedemptions(quantity int) ([]Redemption, error) {
+	if quantity <= 0 {
+		return nil, nil
+	}
+	query := fmt.Sprintf("SELECT code, platform, status, time_unix FROM redemptions WHERE status = ? ORDER BY time_unix DESC LIMIT %d", quantity)
+	rows, err := s.db.Query(query, shift.SUCCESS)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	return scanRedemptions(rows)
+}
+
+func scanRedemptions(rows *sql.Rows) ([]Redemption, error) {
+	var redemptions []Redemption
+	for rows.Next() {
+		var redemption Redemption
+		err := rows.Scan(&redemption.Code, &redemption.Platform, &redemption.Status, &redemption.TimeUnix)
+		if err != nil {
+			return nil, err
+		}
+		redemptions = append(redemptions, redemption)
+	}
+	return redemptions, nil
+}
+
+func (s *Sqlite) AddRedemption(userID, code, platform string, status string) error {
+	t := time.Now().Unix()
+	_, err := s.db.Exec("INSERT INTO redemptions (code, user_id, platform, status, time_unix) VALUES (?, ?, ?, ?, ?)", code, userID, platform, status, t)
 	return err
 }
 

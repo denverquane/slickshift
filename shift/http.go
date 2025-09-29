@@ -4,11 +4,27 @@ import (
 	"bytes"
 	"encoding/json"
 	"errors"
-	"github.com/PuerkitoBio/goquery"
 	"io"
 	"net/http"
 	"net/http/cookiejar"
+	"net/url"
+	"strings"
+
+	"github.com/PuerkitoBio/goquery"
 )
+
+const (
+	HOME        = "https://shift.gearboxsoftware.com/home"
+	SESSIONS    = "https://shift.gearboxsoftware.com/sessions"
+	REWARDS     = "https://shift.gearboxsoftware.com/rewards"
+	ENTITLEMENT = "https://shift.gearboxsoftware.com/entitlement_offer_codes"
+	REDEMPTIONS = "https://shift.gearboxsoftware.com/code_redemptions"
+)
+
+var GearboxURL = &url.URL{
+	Scheme: "https",
+	Host:   "shift.gearboxsoftware.com",
+}
 
 var defaultHeaders = http.Header{
 	"User-Agent":                []string{"Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:109.0) Gecko/20100101 Firefox/119.0"},
@@ -57,11 +73,12 @@ type httpClient struct {
 	headers http.Header
 }
 
-func newHttpClient() (*httpClient, error) {
+func newHttpClient(cookies []*http.Cookie) (*httpClient, error) {
 	jar, err := cookiejar.New(nil)
 	if err != nil {
 		return nil, errors.New("failed to setup cookies")
 	}
+	jar.SetCookies(GearboxURL, cookies)
 
 	return &httpClient{
 		http.Client{
@@ -87,20 +104,26 @@ func (client *httpClient) do(req *http.Request, headers map[string]string) (*htt
 	return client.client.Do(req)
 }
 
-func extractSessionID(resp *http.Response) string {
+func setsRequiredCookies(resp *http.Response) bool {
 	cookies := resp.Header.Values("Set-Cookie")
 
+	return len(ParseRequiredCookies(cookies)) == 2
+}
+
+func ParseRequiredCookies(cookies []string) []*http.Cookie {
+	var newCookies []*http.Cookie
+
 	for _, cookie := range cookies {
-		if len(cookie) >= 12 && cookie[:12] == "_session_id=" {
-			// Extract just the session cookie part
-			sessionCookie := cookie
-			if idx := bytes.IndexByte([]byte(cookie), ';'); idx != -1 {
-				sessionCookie = cookie[:idx]
+		cookie = strings.TrimSpace(cookie)
+		if strings.HasPrefix(cookie, "_session_id=") || strings.HasPrefix(cookie, "si=") {
+			items := strings.Split(cookie, "=")
+			if len(items) != 2 {
+				continue
 			}
-			return sessionCookie
+			newCookies = append(newCookies, &http.Cookie{Name: items[0], Value: items[1]})
 		}
 	}
-	return ""
+	return newCookies
 }
 
 func (client *httpClient) Get(url string, headers map[string]string) (*http.Response, error) {

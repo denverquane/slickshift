@@ -2,9 +2,10 @@ package main
 
 import (
 	"flag"
-	"fmt"
-	"github.com/denverquane/slickshift/shift"
 	"log"
+
+	"github.com/denverquane/slickshift/data"
+	"github.com/denverquane/slickshift/shift"
 )
 
 func main() {
@@ -22,25 +23,37 @@ func main() {
 		log.Fatal("-password is required")
 	}
 
-	c, err := shift.NewClient()
+	log.Println(data.DefaultBL4Codes())
+
+	c, err := shift.NewClient(nil)
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	cookie, err := c.Login(email, password)
+	err = c.Login(email, password)
 	if err != nil {
 		log.Fatal(err)
-	}
-	if cookie == "" {
-		log.Fatal("empty cookie returned from login")
-	} else {
-		log.Println("Login successful!")
 	}
 
-	statusText, err := c.RedeemCode(cookie, "THRBT-WW6CB-56TB5-3B3BJ-XBW3X", "steam")
-	if err != nil {
-		log.Fatal(err)
-	}
-	status := shift.DetermineResponseType(statusText)
-	fmt.Printf("Status Value: %d\nText: %s", status, statusText)
+	//cookies := c.DumpCookies()
+	//if len(cookies) == 0 {
+	//	log.Fatal("No cookies returned")
+	//}
+	//
+	//// remake the client so we can verify that simply copying over the cookies will suffice
+	//c, err = shift.NewClient(cookies)
+	//if err != nil {
+	//	log.Fatal(err)
+	//}
+
+	//rewards, err := c.CheckRewards(shift.Steam, shift.Borderlands4)
+	//if err != nil {
+	//	log.Fatal(err)
+	//}
+	//statusText, err := c.RedeemCode("JSX3J-B6SBJ-CXTBC-B3T3B-BZZZT", shift.Steam)
+	//if err != nil {
+	//	log.Fatal(err)
+	//}
+	//status := shift.DetermineResponseType(statusText)
+	//fmt.Printf("Status Value: %d\nText: %s", status, statusText)
 }

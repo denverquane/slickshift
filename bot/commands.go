@@ -2,13 +2,15 @@ package bot
 
 import (
 	"github.com/bwmarrin/discordgo"
+	"github.com/denverquane/slickshift/shift"
 )
 
 const (
-	HELP     = "help"
-	SECURITY = "security"
-	PLATFORM = "platform"
-	LOGIN    = "login"
+	HELP        = "help"
+	PLATFORM    = "platform"
+	SECURITY    = "security"
+	LOGIN       = "login"
+	LOGINCOOKIE = "login-cookie"
 )
 
 var AllCommands = []*discordgo.ApplicationCommand{
@@ -18,16 +20,7 @@ var AllCommands = []*discordgo.ApplicationCommand{
 	},
 	{
 		Name:        PLATFORM,
-		Description: "View or change the platform for redeeming SHiFT codes",
-		Options: []*discordgo.ApplicationCommandOption{
-			{
-				Type:        discordgo.ApplicationCommandOptionString,
-				Name:        "platform",
-				Description: "Platform for redeeming SHiFT codes",
-				Required:    false,
-				Options:     []*discordgo.ApplicationCommandOption{},
-			},
-		},
+		Description: "View and/or change the platform used for redeeming SHiFT codes",
 	},
 	{
 		Name:        SECURITY,
@@ -48,6 +41,84 @@ var AllCommands = []*discordgo.ApplicationCommand{
 				Name:        "password",
 				Description: "SHiFT password",
 				Required:    true,
+			},
+		},
+	},
+	{
+		Name:        LOGINCOOKIE,
+		Description: "Authenticate using a Cookie obtained manually from the SHiFT website",
+		Options: []*discordgo.ApplicationCommandOption{
+			{
+				Type:        discordgo.ApplicationCommandOptionString,
+				Name:        "cookie",
+				Description: "Cookie (containing si= and _session_id=) as provided by the SHiFT website",
+				Required:    true,
+			},
+		},
+	},
+}
+
+var PlatformComponents = discordgo.ActionsRow{
+	Components: []discordgo.MessageComponent{
+		discordgo.Button{
+			Label: "Steam",
+			Style: discordgo.PrimaryButton,
+			//Emoji: &discordgo.ComponentEmoji{
+			//	Name: ,
+			//},
+			CustomID: SetPlatformPrefix + string(shift.Steam),
+		},
+		discordgo.Button{
+			Label: "Epic",
+			Style: discordgo.PrimaryButton,
+			//Emoji: &discordgo.ComponentEmoji{
+			//	Name: ,
+			//},
+			CustomID: SetPlatformPrefix + string(shift.Epic),
+		},
+		discordgo.Button{
+			Label: "Xbox",
+			Style: discordgo.PrimaryButton,
+			//Emoji: &discordgo.ComponentEmoji{
+			//	Name: ,
+			//},
+			CustomID: SetPlatformPrefix + string(shift.XboxLive),
+		},
+		discordgo.Button{
+			Label: "Playstation",
+			Style: discordgo.PrimaryButton,
+			//Emoji: &discordgo.ComponentEmoji{
+			//	Name: ,
+			//},
+			CustomID: SetPlatformPrefix + string(shift.PSN),
+		},
+	},
+}
+
+var one = 1
+
+var DMComponents = discordgo.ActionsRow{
+	Components: []discordgo.MessageComponent{
+		discordgo.SelectMenu{
+			CustomID:    SetDMPrefix,
+			Placeholder: "Choose one...",
+			MinValues:   &one,
+			MaxValues:   1,
+			Options: []discordgo.SelectMenuOption{
+				{
+					Label: "No, don't DM me",
+					Value: "false",
+					Emoji: &discordgo.ComponentEmoji{
+						Name: "❌",
+					},
+				},
+				{
+					Label: "Yes, please DM me",
+					Value: "true",
+					Emoji: &discordgo.ComponentEmoji{
+						Name: "✅",
+					},
+				},
 			},
 		},
 	},
