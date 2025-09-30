@@ -8,8 +8,7 @@ import (
 	"log"
 	"net/http"
 	"time"
-	
-	"github.com/denverquane/slickshift/shift"
+
 	_ "modernc.org/sqlite"
 )
 
@@ -42,9 +41,9 @@ func (s *Sqlite) UserExists(userID string) bool {
 	return s.exists("users", "id", userID)
 }
 
-func (s *Sqlite) AddUser(userID, platform string, dm bool) error {
+func (s *Sqlite) AddUser(userID string) error {
 	t := time.Now().Unix()
-	_, err := s.db.Exec("INSERT INTO users (id, platform, should_dm, updated_unix) VALUES (?, ?, ?, ?)", userID, platform, dm, t)
+	_, err := s.db.Exec("INSERT INTO users (id, updated_unix, created_unix) VALUES (?, ?, ?)", userID, t, t)
 	return err
 }
 
@@ -55,27 +54,30 @@ func (s *Sqlite) SetUserDM(userID string, dm bool) error {
 }
 
 func (s *Sqlite) GetUserDM(userID string) (bool, error) {
-	var value bool
+	var value sql.NullBool
 	err := s.db.QueryRow("SELECT should_dm FROM users WHERE id = ?", userID).Scan(&value)
 	if err != nil {
 		return false, err
 	}
-	return value, nil
+	return value.Valid && value.Bool, nil
 }
 
 func (s *Sqlite) SetUserPlatform(userID, platform string) error {
 	t := time.Now().Unix()
-	_, err := s.db.Exec("INSERT INTO users (id, platform, updated_unix) VALUES (?, ?, ?) ON CONFLICT (id) DO UPDATE SET platform = excluded.platform, updated_unix = excluded.updated_unix", userID, platform, t)
+	_, err := s.db.Exec("UPDATE users SET platform = ?, updated_unix = ? WHERE id = ?", platform, t, userID)
 	return err
 }
 
 func (s *Sqlite) GetUserPlatform(userID string) (string, error) {
-	var platform string
+	var platform sql.NullString
 	err := s.db.QueryRow("SELECT platform FROM users WHERE id = ?", userID).Scan(&platform)
 	if err != nil {
 		return "", err
 	}
-	return platform, nil
+	if platform.Valid {
+		return platform.String, nil
+	}
+	return "", nil
 }
 
 func (s *Sqlite) EncryptAndSetUserCookies(userID string, cookies []*http.Cookie) error {
@@ -110,9 +112,13 @@ func (s *Sqlite) GetDecryptedUserCookies(userID string) ([]*http.Cookie, error) 
 	return cookies, nil
 }
 
+func (s *Sqlite) CodeExists(code string) bool {
+	return s.exists("shift_codes", "code", code)
+}
+
 func (s *Sqlite) AddCode(code, game string, userID *string, source *string) error {
 	t := time.Now().Unix()
-	_, err := s.db.Exec("INSERT OR IGNORE INTO shift_codes (code, game, user_id, source, added_unix) VALUES (?, ?, ?, ?, ?)", code, game, userID, source, t)
+	_, err := s.db.Exec("INSERT OR IGNORE INTO shift_codes (code, game, user_id, source, created_unix) VALUES (?, ?, ?, ?, ?)", code, game, userID, source, t)
 	return err
 }
 
@@ -146,7 +152,7 @@ func (s *Sqlite) GetCodesNotRedeemedForUser(userID, platform string) ([]string, 
 	return codes, nil
 }
 
-func (s *Sqlite) GetAllUserCookies() ([]UserCookies, error) {
+func (s *Sqlite) GetAllDecryptedUserCookies() ([]UserCookies, error) {
 	rows, err := s.db.Query("SELECT user_id, encrypted_cookie_json FROM user_cookies")
 	if err != nil {
 		return nil, err
@@ -177,26 +183,20 @@ func (s *Sqlite) GetAllUserCookies() ([]UserCookies, error) {
 	return userCookies, nil
 }
 
-func (s *Sqlite) RecentRedemptionsForUser(userID string, quantity int) ([]Redemption, error) {
+func (s *Sqlite) GetRecentRedemptionsForUser(userID string, status string, quantity int) ([]Redemption, error) {
 	if quantity <= 0 {
 		return nil, nil
 	}
-	query := fmt.Sprintf("SELECT code, platform, status, time_unix FROM redemptions WHERE user_id = ? ORDER BY time_unix DESC LIMIT %d", quantity)
-	rows, err := s.db.Query(query, userID)
-	if err != nil {
-		return nil, err
+	var insert string
+	args := []any{
+		userID,
 	}
-	defer rows.Close()
-
-	return scanRedemptions(rows)
-}
-
-func (s *Sqlite) RecentSuccessfulRedemptions(quantity int) ([]Redemption, error) {
-	if quantity <= 0 {
-		return nil, nil
+	if status != "" {
+		insert = "AND r.status = ? "
+		args = append(args, status)
 	}
-	query := fmt.Sprintf("SELECT code, platform, status, time_unix FROM redemptions WHERE status = ? ORDER BY time_unix DESC LIMIT %d", quantity)
-	rows, err := s.db.Query(query, shift.SUCCESS)
+	query := fmt.Sprintf("SELECT r.code, r.platform, r.status, r.created_unix, s.game, s.reward FROM redemptions r JOIN shift_codes s ON r.code = s.code WHERE r.user_id = ? %sORDER BY r.created_unix DESC LIMIT %d", insert, quantity)
+	rows, err := s.db.Query(query, args...)
 	if err != nil {
 		return nil, err
 	}
@@ -209,7 +209,7 @@ func scanRedemptions(rows *sql.Rows) ([]Redemption, error) {
 	var redemptions []Redemption
 	for rows.Next() {
 		var redemption Redemption
-		err := rows.Scan(&redemption.Code, &redemption.Platform, &redemption.Status, &redemption.TimeUnix)
+		err := rows.Scan(&redemption.Code, &redemption.Platform, &redemption.Status, &redemption.TimeUnix, &redemption.Game, &redemption.Reward)
 		if err != nil {
 			return nil, err
 		}
@@ -220,7 +220,7 @@ func scanRedemptions(rows *sql.Rows) ([]Redemption, error) {
 
 func (s *Sqlite) AddRedemption(userID, code, platform string, status string) error {
 	t := time.Now().Unix()
-	_, err := s.db.Exec("INSERT INTO redemptions (code, user_id, platform, status, time_unix) VALUES (?, ?, ?, ?, ?)", code, userID, platform, status, t)
+	_, err := s.db.Exec("INSERT INTO redemptions (code, user_id, platform, status, created_unix) VALUES (?, ?, ?, ?, ?)", code, userID, platform, status, t)
 	return err
 }
 

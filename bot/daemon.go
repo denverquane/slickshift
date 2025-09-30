@@ -11,7 +11,7 @@ import (
 func (bot *Bot) StartProcessing(interval time.Duration) {
 	for {
 		slog.Info("Beginning processing loop")
-		userCookies, err := bot.storage.GetAllUserCookies()
+		userCookies, err := bot.storage.GetAllDecryptedUserCookies()
 		if err != nil {
 			slog.Error("Error getting cookies", "error", err.Error())
 			continue
@@ -21,6 +21,10 @@ func (bot *Bot) StartProcessing(interval time.Duration) {
 			platform, err := bot.storage.GetUserPlatform(user.UserID)
 			if err != nil {
 				slog.Error("Error getting platform", "user_id", user.UserID, "error", err.Error())
+				continue
+			}
+			if platform == "" {
+				slog.Info("Skipping user with no platform set", "user_id", user.UserID)
 				continue
 			}
 			codes, err := bot.storage.GetCodesNotRedeemedForUser(user.UserID, platform)

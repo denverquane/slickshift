@@ -1,8 +1,9 @@
 CREATE TABLE IF NOT EXISTS users (
     id UNSIGNED BIG INT PRIMARY KEY,
-    platform TEXT NOT NULL,
-    should_dm BOOLEAN NOT NULL,
-    updated_unix UNSIGNED BIG INT
+    platform TEXT,
+    should_dm BOOLEAN,
+    updated_unix UNSIGNED BIG INT NOT NULL,
+    created_unix UNSIGNED BIG INT NOT NULL
 );
 
 CREATE TABLE IF NOT EXISTS user_cookies (
@@ -19,7 +20,7 @@ CREATE TABLE IF NOT EXISTS shift_codes (
     reward TEXT,
     source TEXT, -- where the code was sourced, if not by a user (twitter, instagram, etc)
     user_id BIG INT, -- who added/registered the code
-    added_unix UNSIGNED BIG INT NOT NULL,
+    created_unix UNSIGNED BIG INT NOT NULL,
 
     FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE SET NULL
 );
@@ -30,7 +31,7 @@ CREATE TABLE IF NOT EXISTS redemptions (
     platform TEXT NOT NULL,
     status TEXT NOT NULL,
 
-    time_unix UNSIGNED BIG INT NOT NULL,
+    created_unix UNSIGNED BIG INT NOT NULL,
 
     FOREIGN KEY (code) REFERENCES shift_codes (code) ON DELETE CASCADE,
     FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE,

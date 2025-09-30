@@ -11,6 +11,8 @@ const (
 	SECURITY    = "security"
 	LOGIN       = "login"
 	LOGINCOOKIE = "login-cookie"
+	ADD         = "add"
+	REDEMPTIONS = "redemptions"
 )
 
 var AllCommands = []*discordgo.ApplicationCommand{
@@ -53,6 +55,32 @@ var AllCommands = []*discordgo.ApplicationCommand{
 				Name:        "cookie",
 				Description: "Cookie (containing si= and _session_id=) as provided by the SHiFT website",
 				Required:    true,
+			},
+		},
+	},
+	{
+		Name:        ADD,
+		Description: "Add a new SHiFT code",
+		Options: []*discordgo.ApplicationCommandOption{
+			{
+				Type:        discordgo.ApplicationCommandOptionString,
+				Name:        "code",
+				Description: "SHiFT code",
+				Required:    true,
+				MinLength:   &shift.CodeLength,
+				MaxLength:   shift.CodeLength,
+			},
+		},
+	},
+	{
+		Name:        REDEMPTIONS,
+		Description: "View recent redemptions SlickShift has performed for you",
+		Options: []*discordgo.ApplicationCommandOption{
+			{
+				Type:        discordgo.ApplicationCommandOptionBoolean,
+				Name:        "successful",
+				Description: "Only retrieve successful redemptions",
+				Required:    false,
 			},
 		},
 	},

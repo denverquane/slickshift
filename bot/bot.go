@@ -3,6 +3,7 @@ package bot
 import (
 	"log"
 	"strings"
+	"time"
 
 	"github.com/denverquane/slickshift/shift"
 	"github.com/denverquane/slickshift/store"
@@ -15,6 +16,12 @@ const (
 	SetPlatformPrefix = "set_platform_"
 	SetDMPrefix       = "set_dm_value"
 	//GithubLink        = "https://github.com/denverquane/slickshift/releases"
+)
+
+const (
+	Red    = 15548997
+	Green  = 5763719
+	Yellow = 16705372
 )
 
 type Bot struct {
@@ -73,30 +80,20 @@ func (bot *Bot) getSlashResponse(s *discordgo.Session, i *discordgo.InteractionC
 	if i.Type == discordgo.InteractionApplicationCommand {
 		switch i.ApplicationCommandData().Name {
 		case HELP:
+			var embeds []*discordgo.MessageEmbed
+			for _, command := range AllCommands {
+				embeds = append(embeds, &discordgo.MessageEmbed{
+					Title:       "`/" + command.Name + "`",
+					Description: "`" + command.Description + "`",
+				})
+			}
 			return &discordgo.InteractionResponse{
 				Type: discordgo.InteractionResponseChannelMessageWithSource,
 				Data: &discordgo.InteractionResponseData{
 					Flags: PrivateResponse,
 					Content: "SlickShift is a bot that can redeem Borderlands 4 SHiFT codes for you!\n\n" +
 						"Below are the commands you can use to interact with SlickShift:",
-					Embeds: []*discordgo.MessageEmbed{
-						&discordgo.MessageEmbed{
-							Title:       "`/" + LOGIN + "`",
-							Description: "Provide your SHiFT credentials to begin the authentication process.",
-						},
-						&discordgo.MessageEmbed{
-							Title:       "`/" + LOGINCOOKIE + "`",
-							Description: "Manually provide a SHiFT website cookie instead of providing username/password.",
-						},
-						&discordgo.MessageEmbed{
-							Title:       "`/" + SECURITY + "`",
-							Description: "View details on how your credentials are used for SlickShift to function.",
-						},
-						&discordgo.MessageEmbed{
-							Title:       "`/" + PLATFORM + "`",
-							Description: ":tada: View or change the platform on which SlickShift will redeem codes for you.",
-						},
-					},
+					Embeds: embeds,
 				},
 			}
 		case SECURITY:
@@ -120,6 +117,13 @@ func (bot *Bot) getSlashResponse(s *discordgo.Session, i *discordgo.InteractionC
 					},
 				}
 			}
+			var content string
+			if platform == "" {
+				content = "Please set your platform using the Buttons below!"
+			} else {
+				content = "Your current platform for SHiFT code auto-redemption is `" + strings.Title(platform) + "`\n" +
+					"If you wish to change it, please use the Buttons below!"
+			}
 			return &discordgo.InteractionResponse{
 				Type: discordgo.InteractionResponseChannelMessageWithSource,
 				Data: &discordgo.InteractionResponseData{
@@ -127,8 +131,7 @@ func (bot *Bot) getSlashResponse(s *discordgo.Session, i *discordgo.InteractionC
 					Components: []discordgo.MessageComponent{
 						PlatformComponents,
 					},
-					Content: "Your current platform for SHiFT code auto-redemption is `" + strings.Title(platform) + "`\n" +
-						"If you wish to change it, please use the Buttons below!",
+					Content: content,
 				},
 			}
 		case LOGIN:
@@ -243,38 +246,135 @@ func (bot *Bot) getSlashResponse(s *discordgo.Session, i *discordgo.InteractionC
 					Content: "Success! I've securely stored your session cookies for automatic SHiFT code redemption!",
 				},
 			}
+		case ADD:
+			code := i.ApplicationCommandData().Options[0].StringValue()
+			if !shift.CodeRegex.MatchString(code) {
+				return &discordgo.InteractionResponse{
+					Type: discordgo.InteractionResponseChannelMessageWithSource,
+					Data: &discordgo.InteractionResponseData{
+						Flags: PrivateResponse,
+						Content: "Hm, doesn't look like you provided a valid SHiFT code. It should look something like:\n\n" +
+							"`XXXX-XXXXX-XXXXX-XXXXX-XXXXX`",
+					},
+				}
+			}
+			if bot.storage.CodeExists(code) {
+				return &discordgo.InteractionResponse{
+					Type: discordgo.InteractionResponseChannelMessageWithSource,
+					Data: &discordgo.InteractionResponseData{
+						Flags:   PrivateResponse,
+						Content: "It looks like that code already exists!\nThanks anyways!",
+					},
+				}
+			}
+			var src = store.DiscordSource
+			err := bot.storage.AddCode(code, string(shift.Borderlands4), &i.Member.User.ID, &src)
+			if err != nil {
+				log.Println(err)
+				return nil
+			}
+			return &discordgo.InteractionResponse{
+				Type: discordgo.InteractionResponseChannelMessageWithSource,
+				Data: &discordgo.InteractionResponseData{
+					Flags:   PrivateResponse,
+					Content: "Nice, thanks for adding the code! It should be tested and validated soon!",
+				},
+			}
+		case REDEMPTIONS:
+			values := i.ApplicationCommandData().Options
+			var status string
+			if len(values) > 0 && values[0].BoolValue() {
+				status = shift.SUCCESS
+			}
+			redemptions, err := bot.storage.GetRecentRedemptionsForUser(i.Member.User.ID, status, 3)
+			if err != nil {
+				log.Println(err)
+				return &discordgo.InteractionResponse{
+					Type: discordgo.InteractionResponseChannelMessageWithSource,
+					Data: &discordgo.InteractionResponseData{
+						Flags:   PrivateResponse,
+						Content: "Yikes, I got an error fetching your redemptions. Please try again later.",
+					},
+				}
+			}
+			if len(redemptions) == 0 {
+				return &discordgo.InteractionResponse{
+					Type: discordgo.InteractionResponseChannelMessageWithSource,
+					Data: &discordgo.InteractionResponseData{
+						Flags:   PrivateResponse,
+						Content: "Sorry, I don't have any of those redemptions for you yet!",
+					},
+				}
+			}
+			var embeds []*discordgo.MessageEmbed
+			for _, red := range redemptions {
+				var reward string
+				var color int
+				if red.Reward.Valid {
+					reward = red.Reward.String
+				} else {
+					reward = "*Reward Unknown*"
+				}
+				switch red.Status {
+				case shift.SUCCESS:
+					color = Green
+				case shift.ALREADY_REDEEMED:
+					color = Yellow
+				case shift.NOT_EXIST:
+				case shift.EXPIRED:
+					color = Red
+				}
+				embeds = append(embeds, &discordgo.MessageEmbed{
+					Title: reward,
+					Fields: []*discordgo.MessageEmbedField{
+						{
+							Name:  "Code",
+							Value: red.Code,
+						},
+						//&discordgo.MessageEmbedField{
+						//	Name:  "Game",
+						//	Value: red.Game,
+						//},
+					},
+					Color:       color,
+					Description: red.Status,
+					Timestamp:   time.Unix(red.TimeUnix, 0).UTC().Format(time.RFC3339),
+				})
+			}
+			return &discordgo.InteractionResponse{
+				Type: discordgo.InteractionResponseChannelMessageWithSource,
+				Data: &discordgo.InteractionResponseData{
+					Flags:  PrivateResponse,
+					Embeds: embeds,
+				},
+			}
 		}
 	} else if i.Type == discordgo.InteractionMessageComponent {
 		exists := bot.storage.UserExists(i.Member.User.ID)
+		if !exists {
+			err := bot.storage.AddUser(i.Member.User.ID)
+			if err != nil {
+				log.Println(err)
+				return nil
+			}
+		}
+		oldPlatform, err := bot.storage.GetUserPlatform(i.Member.User.ID)
+		if err != nil {
+			log.Println(err)
+			return nil
+		}
 		id := i.MessageComponentData().CustomID
 		if strings.HasPrefix(id, SetPlatformPrefix) {
 			platform := strings.TrimPrefix(id, SetPlatformPrefix)
 
 			// TODO verify the id here
-
-			if !exists {
-				err := bot.storage.AddUser(i.Member.User.ID, platform, false)
-				if err != nil {
-					log.Println(err)
-					return nil
-				}
-				return &discordgo.InteractionResponse{
-					Type: discordgo.InteractionResponseChannelMessageWithSource,
-					Data: &discordgo.InteractionResponseData{
-						Flags: PrivateResponse,
-						Content: "Success!\nThe next step is to setup authentication with SHiFT so that I " +
-							"can redeem codes for you automatically in the future!\n\n" +
-							"There are two different options available at this time:\n" +
-							"* Provide your SHiFT email/password directly with `/" + LOGIN + "`\n" +
-							"* Provide a Cookie you obtain yourself from the SHiFT website with `/" + LOGINCOOKIE + "`\n\n" +
-							"To see more details about the differences between these two options, try `/" + SECURITY + "`",
-					},
-				}
-			}
 			err := bot.storage.SetUserPlatform(i.Member.User.ID, platform)
 			if err != nil {
 				log.Println(err)
 				return nil
+			}
+			if !exists || oldPlatform == "" {
+				return registeredUserResponse()
 			}
 			return &discordgo.InteractionResponse{
 				Type: discordgo.InteractionResponseChannelMessageWithSource,
@@ -336,6 +436,21 @@ func unregisteredUserResponse() *discordgo.InteractionResponse {
 				DMComponents,
 				PlatformComponents,
 			},
+		},
+	}
+}
+
+func registeredUserResponse() *discordgo.InteractionResponse {
+	return &discordgo.InteractionResponse{
+		Type: discordgo.InteractionResponseChannelMessageWithSource,
+		Data: &discordgo.InteractionResponseData{
+			Flags: PrivateResponse,
+			Content: "Success!\nThe next step is to setup authentication with SHiFT so that I " +
+				"can redeem codes for you automatically in the future!\n\n" +
+				"There are two different options available at this time:\n" +
+				"* Provide your SHiFT email/password directly with `/" + LOGIN + "`\n" +
+				"* Provide a Cookie you obtain yourself from the SHiFT website with `/" + LOGINCOOKIE + "`\n\n" +
+				"To see more details about the differences between these two options, try `/" + SECURITY + "`",
 		},
 	}
 }
