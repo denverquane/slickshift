@@ -95,7 +95,7 @@ var PlatformComponents = discordgo.ActionsRow{
 	},
 }
 
-var one = 1
+var one = 0
 
 var DMComponents = discordgo.ActionsRow{
 	Components: []discordgo.MessageComponent{

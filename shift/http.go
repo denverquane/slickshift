@@ -116,7 +116,11 @@ func ParseRequiredCookies(cookies []string) []*http.Cookie {
 	for _, cookie := range cookies {
 		cookie = strings.TrimSpace(cookie)
 		if strings.HasPrefix(cookie, "_session_id=") || strings.HasPrefix(cookie, "si=") {
-			items := strings.Split(cookie, "=")
+			first := strings.Split(cookie, ";")
+			if len(first) < 1 {
+				continue
+			}
+			items := strings.Split(first[0], "=")
 			if len(items) != 2 {
 				continue
 			}

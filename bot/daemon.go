@@ -49,7 +49,14 @@ func (bot *Bot) StartProcessing(interval time.Duration) {
 					}
 				}
 				if status == shift.SUCCESS {
-
+					str := "I successfully redeemed the code `" + code + "` for you!\n"
+					if reward != nil {
+						str += "Looks like it was for `" + reward.Title + "`\n"
+					}
+					err = bot.DMUser(user.UserID, str)
+					if err != nil {
+						slog.Error("Error DMing user", "user_id", user.UserID, "error", err.Error())
+					}
 				}
 
 			}

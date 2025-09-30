@@ -149,6 +149,7 @@ func (bot *Bot) getSlashResponse(s *discordgo.Session, i *discordgo.InteractionC
 
 			err = client.Login(email, password)
 			if err != nil {
+				log.Println(err)
 				err = s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
 					Type: discordgo.InteractionResponseChannelMessageWithSource,
 					Data: &discordgo.InteractionResponseData{
@@ -266,22 +267,21 @@ func (bot *Bot) getSlashResponse(s *discordgo.Session, i *discordgo.InteractionC
 							"There are two different options available at this time:\n" +
 							"* Provide your SHiFT email/password directly with `/" + LOGIN + "`\n" +
 							"* Provide a Cookie you obtain yourself from the SHiFT website with `/" + LOGINCOOKIE + "`\n\n" +
-							"To see more details about the differences between these two options, use `" + SECURITY + "`",
+							"To see more details about the differences between these two options, try `/" + SECURITY + "`",
 					},
 				}
-			} else {
-				err := bot.storage.SetUserPlatform(i.Member.User.ID, platform)
-				if err != nil {
-					log.Println(err)
-					return nil
-				}
-				return &discordgo.InteractionResponse{
-					Type: discordgo.InteractionResponseChannelMessageWithSource,
-					Data: &discordgo.InteractionResponseData{
-						Flags:   PrivateResponse,
-						Content: "Got it!\nSet the platform for future redemptions to: `" + strings.Title(platform) + "`",
-					},
-				}
+			}
+			err := bot.storage.SetUserPlatform(i.Member.User.ID, platform)
+			if err != nil {
+				log.Println(err)
+				return nil
+			}
+			return &discordgo.InteractionResponse{
+				Type: discordgo.InteractionResponseChannelMessageWithSource,
+				Data: &discordgo.InteractionResponseData{
+					Flags:   PrivateResponse,
+					Content: "Got it!\nSet the platform for future redemptions to: `" + strings.Title(platform) + "`",
+				},
 			}
 		} else if strings.HasPrefix(id, SetDMPrefix) {
 			value := i.MessageComponentData().Values[0]
@@ -292,20 +292,27 @@ func (bot *Bot) getSlashResponse(s *discordgo.Session, i *discordgo.InteractionC
 					Type: discordgo.InteractionResponseChannelMessageWithSource,
 					Data: &discordgo.InteractionResponseData{
 						Flags:   PrivateResponse,
-						Content: "Hm, I got an error trying to set your DM preference. Try again later.",
+						Content: "Hm, I got an error trying to set your DM preference. Please try again later.",
 					},
 				}
 			}
 			if dm {
-				return &discordgo.InteractionResponse{
-					Type: discordgo.InteractionResponseChannelMessageWithSource,
-					Data: &discordgo.InteractionResponseData{
-						Flags: PrivateResponse,
-						Content: ":thumbsup: By the way, I can only send you messages if:\n" +
-							"1. You're a member of a server that I'm also in\n" +
-							"2. You haven’t disabled DMs from server members",
-					},
-				}
+				go func() {
+					err = bot.DMUser(i.Member.User.ID, "Hey there!\nWas just confirming I could send you a message.\nThanks!")
+					if err != nil {
+						err = s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
+							Type: discordgo.InteractionResponseChannelMessageWithSource,
+							Data: &discordgo.InteractionResponseData{
+								Flags: PrivateResponse,
+								Content: "Hm, doesn't look like I was able to send you a Direct Message... Are you sure you " +
+									"haven’t disabled DMs from server members?",
+							},
+						})
+						if err != nil {
+							log.Println(err)
+						}
+					}
+				}()
 			}
 			return &discordgo.InteractionResponse{
 				Type: discordgo.InteractionResponseDeferredMessageUpdate,
@@ -331,6 +338,15 @@ func unregisteredUserResponse() *discordgo.InteractionResponse {
 			},
 		},
 	}
+}
+
+func (bot *Bot) DMUser(userID, content string) error {
+	channel, err := bot.session.UserChannelCreate(userID)
+	if err != nil {
+		return err
+	}
+	_, err = bot.session.ChannelMessageSend(channel.ID, content)
+	return err
 }
 
 func (bot *Bot) RegisterCommands(guildID string) ([]*discordgo.ApplicationCommand, error) {
