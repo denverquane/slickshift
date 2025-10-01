@@ -7,7 +7,7 @@ import (
 
 const (
 	HELP        = "help"
-	PLATFORM    = "platform"
+	SETTINGS    = "settings"
 	SECURITY    = "security"
 	LOGIN       = "login"
 	LOGINCOOKIE = "login-cookie"
@@ -21,8 +21,8 @@ var AllCommands = []*discordgo.ApplicationCommand{
 		Description: "View Help information and how to use SlickShift",
 	},
 	{
-		Name:        PLATFORM,
-		Description: "View and/or change the platform used for redeeming SHiFT codes",
+		Name:        SETTINGS,
+		Description: "View and/or change the settings used for redeeming SHiFT codes",
 	},
 	{
 		Name:        SECURITY,

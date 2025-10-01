@@ -5,6 +5,7 @@ import (
 	_ "embed"
 	"encoding/json"
 	"fmt"
+	"github.com/denverquane/slickshift/shift"
 	"log"
 	"net/http"
 	"time"
@@ -135,7 +136,12 @@ func (s *Sqlite) SetCodeRewardIfNotSet(code, reward string) (bool, error) {
 }
 
 func (s *Sqlite) GetCodesNotRedeemedForUser(userID, platform string) ([]string, error) {
-	rows, err := s.db.Query("SELECT sc.code FROM shift_codes sc WHERE NOT EXISTS (SELECT 1 FROM redemptions r WHERE r.code = sc.code AND r.user_id = ? AND r.platform = ?)", userID, platform)
+	// grab codes that the user hasn't redeemed for the platform before,
+	// AND, if the code hasn't been marked as expired by anyone
+
+	// TODO maybe have a minimum threshold on how many expiries have to be marked before we ignore?
+	query := fmt.Sprintf("SELECT sc.code FROM shift_codes sc WHERE NOT EXISTS (SELECT 1 FROM redemptions r WHERE r.code = sc.code AND r.user_id = ? AND r.platform = ?) AND NOT EXISTS (SELECT 1 FROM redemptions rr WHERE rr.code = sc.code AND rr.status = '%s')", shift.EXPIRED)
+	rows, err := s.db.Query(query, userID, platform)
 	if err != nil {
 		return nil, err
 	}

@@ -73,29 +73,13 @@ func (bot *Bot) handleSlashCommand(s *discordgo.Session, i *discordgo.Interactio
 			log.Println(err)
 		}
 	}
-
 }
 
 func (bot *Bot) getSlashResponse(s *discordgo.Session, i *discordgo.InteractionCreate) *discordgo.InteractionResponse {
 	if i.Type == discordgo.InteractionApplicationCommand {
 		switch i.ApplicationCommandData().Name {
 		case HELP:
-			var embeds []*discordgo.MessageEmbed
-			for _, command := range AllCommands {
-				embeds = append(embeds, &discordgo.MessageEmbed{
-					Title:       "`/" + command.Name + "`",
-					Description: "`" + command.Description + "`",
-				})
-			}
-			return &discordgo.InteractionResponse{
-				Type: discordgo.InteractionResponseChannelMessageWithSource,
-				Data: &discordgo.InteractionResponseData{
-					Flags: PrivateResponse,
-					Content: "SlickShift is a bot that can redeem Borderlands 4 SHiFT codes for you!\n\n" +
-						"Below are the commands you can use to interact with SlickShift:",
-					Embeds: embeds,
-				},
-			}
+			return bot.helpResponse(s, i)
 		case SECURITY:
 			// TODO
 			return &discordgo.InteractionResponse{
@@ -105,147 +89,12 @@ func (bot *Bot) getSlashResponse(s *discordgo.Session, i *discordgo.InteractionC
 					Content: "Super secure, bro. Trust.",
 				},
 			}
-		case PLATFORM:
-			platform, err := bot.storage.GetUserPlatform(i.Member.User.ID)
-			if err != nil {
-				log.Println(err)
-				return &discordgo.InteractionResponse{
-					Type: discordgo.InteractionResponseChannelMessageWithSource,
-					Data: &discordgo.InteractionResponseData{
-						Flags:   PrivateResponse,
-						Content: "Hm, I got an error fetching your platform. Please try again later.",
-					},
-				}
-			}
-			var content string
-			if platform == "" {
-				content = "Please set your platform using the Buttons below!"
-			} else {
-				content = "Your current platform for SHiFT code auto-redemption is `" + strings.Title(platform) + "`\n" +
-					"If you wish to change it, please use the Buttons below!"
-			}
-			return &discordgo.InteractionResponse{
-				Type: discordgo.InteractionResponseChannelMessageWithSource,
-				Data: &discordgo.InteractionResponseData{
-					Flags: PrivateResponse,
-					Components: []discordgo.MessageComponent{
-						PlatformComponents,
-					},
-					Content: content,
-				},
-			}
+		case SETTINGS:
+			return bot.settingsResponse(s, i)
 		case LOGIN:
-			email := i.ApplicationCommandData().Options[0].StringValue()
-			password := i.ApplicationCommandData().Options[1].StringValue()
-
-			client, err := shift.NewClient(nil)
-			if err != nil {
-				log.Println(err)
-				return &discordgo.InteractionResponse{
-					Type: discordgo.InteractionResponseChannelMessageWithSource,
-					Data: &discordgo.InteractionResponseData{
-						Flags:   PrivateResponse,
-						Content: "I encountered an error creating an HTTP client for login. Please try again later.",
-					},
-				}
-			}
-
-			err = client.Login(email, password)
-			if err != nil {
-				log.Println(err)
-				err = s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
-					Type: discordgo.InteractionResponseChannelMessageWithSource,
-					Data: &discordgo.InteractionResponseData{
-						Flags:   PrivateResponse,
-						Content: "I wasn't able to log you in to SHiFT. Are you sure you provided the right credentials?",
-					},
-				})
-				if err != nil {
-					log.Println(err)
-				}
-				return nil
-			}
-			cookies := client.DumpCookies()
-			err = bot.storage.EncryptAndSetUserCookies(i.Member.User.ID, cookies)
-			if err != nil {
-				log.Println(err)
-				err = s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
-					Type: discordgo.InteractionResponseChannelMessageWithSource,
-					Data: &discordgo.InteractionResponseData{
-						Flags:   PrivateResponse,
-						Content: "I logged into SHiFT with your info, but I wasn't able to store your session cookies for later...",
-					},
-				})
-				if err != nil {
-					log.Println(err)
-				}
-				return nil
-			}
-			return &discordgo.InteractionResponse{
-				Type: discordgo.InteractionResponseChannelMessageWithSource,
-				Data: &discordgo.InteractionResponseData{
-					Flags:   PrivateResponse,
-					Content: "Success! I've securely stored your session cookies (and purged your email/password) for automatic SHiFT code redemption!",
-				},
-			}
+			return bot.loginResponse(s, i)
 		case LOGINCOOKIE:
-			cookie := strings.TrimSpace(i.ApplicationCommandData().Options[0].StringValue())
-			cookies := strings.Split(cookie, ";")
-			newCookies := shift.ParseRequiredCookies(cookies)
-			if len(newCookies) != 2 {
-				return &discordgo.InteractionResponse{
-					Type: discordgo.InteractionResponseChannelMessageWithSource,
-					Data: &discordgo.InteractionResponseData{
-						Flags: PrivateResponse,
-						Content: "Hm, doesn't look like you provided the right Cookie... It should look something like:\n\n`" +
-							"si=lots_of_text_here; _session_id=more_text_here`",
-					},
-				}
-			}
-			client, err := shift.NewClient(newCookies)
-			if err != nil {
-				log.Println(err)
-				return &discordgo.InteractionResponse{
-					Type: discordgo.InteractionResponseChannelMessageWithSource,
-					Data: &discordgo.InteractionResponseData{
-						Flags:   PrivateResponse,
-						Content: "I encountered an error creating an HTTP client for login. Please try again later.",
-					},
-				}
-			}
-			_, err = client.CheckRewards(shift.Steam, shift.Borderlands4, 0)
-			if err != nil {
-				log.Println(err)
-				return &discordgo.InteractionResponse{
-					Type: discordgo.InteractionResponseChannelMessageWithSource,
-					Data: &discordgo.InteractionResponseData{
-						Flags:   PrivateResponse,
-						Content: "I encountered an error fetching the SHiFT rewards website with your Cookie. Are you sure you copy/pasted it correctly?",
-					},
-				}
-			}
-			err = bot.storage.EncryptAndSetUserCookies(i.Member.User.ID, newCookies)
-			if err != nil {
-				log.Println(err)
-				err = s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
-					Type: discordgo.InteractionResponseChannelMessageWithSource,
-					Data: &discordgo.InteractionResponseData{
-						Flags:   PrivateResponse,
-						Content: "I logged into SHiFT with your info, but I wasn't able to store your session cookies for later...",
-					},
-				})
-				if err != nil {
-					log.Println(err)
-				}
-				return nil
-			}
-			return &discordgo.InteractionResponse{
-				Type: discordgo.InteractionResponseChannelMessageWithSource,
-				Data: &discordgo.InteractionResponseData{
-					Flags:   PrivateResponse,
-					Content: "Success! I've securely stored your session cookies for automatic SHiFT code redemption!",
-				},
-			}
+			return bot.loginCookieResponse(s, i)
 		case ADD:
 			code := i.ApplicationCommandData().Options[0].StringValue()
 			if !shift.CodeRegex.MatchString(code) {
@@ -430,8 +279,7 @@ func unregisteredUserResponse() *discordgo.InteractionResponse {
 			Flags: PrivateResponse,
 			Content: "Looks like this is your first time using SlickShift! Welcome!\n\n" +
 				"I'm here to help you automatically redeem SHiFT codes for Borderlands 4!\n\n*To get started:*\n" +
-				"* Do you want me to message you when I redeem codes for you, or when your login details expire?\n" +
-				"* Also, can you tell me what platform you'd like to auto-redeem SHiFT codes for?\n",
+				settingsSuffix,
 			Components: []discordgo.MessageComponent{
 				DMComponents,
 				PlatformComponents,
