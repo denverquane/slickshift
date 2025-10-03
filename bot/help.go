@@ -7,7 +7,7 @@ func (bot *Bot) helpResponse(s *discordgo.Session, i *discordgo.InteractionCreat
 	for _, command := range AllCommands {
 		embeds = append(embeds, &discordgo.MessageEmbed{
 			Title:       "`/" + command.Name + "`",
-			Description: "`" + command.Description + "`",
+			Description: command.Description,
 		})
 	}
 	return &discordgo.InteractionResponse{

@@ -1,20 +1,27 @@
 package store
 
 import (
+	"context"
 	"database/sql"
+	"embed"
 	_ "embed"
 	"encoding/json"
 	"fmt"
-	"github.com/denverquane/slickshift/shift"
+	"io/fs"
 	"log"
+	"log/slog"
 	"net/http"
+	"strconv"
+	"strings"
 	"time"
+
+	"github.com/denverquane/slickshift/shift"
 
 	_ "modernc.org/sqlite"
 )
 
-//go:embed sqlite.sql
-var schema string
+//go:embed sqlite/*.sql
+var schemaFS embed.FS
 
 type Sqlite struct {
 	db        *sql.DB
@@ -30,12 +37,52 @@ func NewSqliteStore(filepath string, encryptor *Encryptor) (Store, error) {
 	if err != nil {
 		return nil, err
 	}
-	_, err = db.Exec(schema)
-	if err != nil {
-		return nil, err
-	}
+	currentVersion := getVersion(db)
+	slog.Info("initialized db", "version", currentVersion)
+
+	err = fs.WalkDir(schemaFS, "sqlite", func(path string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if !d.IsDir() && strings.HasSuffix(d.Name(), ".sql") {
+			name := strings.TrimSuffix(d.Name(), ".sql")
+			val, err := strconv.ParseInt(name, 10, 64)
+			if err != nil {
+				return err
+			}
+			if val > currentVersion {
+				contents, err := schemaFS.ReadFile(path)
+				if err != nil {
+					return err
+				}
+				slog.Info("applying migration script", "version", val, "path", path)
+				_, err = db.Exec(string(contents))
+				if err != nil {
+					return err
+				}
+				err = setVersion(db, val)
+				if err != nil {
+					return err
+				}
+			}
+		}
+		return nil
+	})
 
 	return &Sqlite{db: db, encryptor: encryptor}, nil
+}
+
+func getVersion(db *sql.DB) int64 {
+	var version int64
+	err := db.QueryRow("PRAGMA user_version").Scan(&version)
+	if err != nil {
+		return -1
+	}
+	return version
+}
+func setVersion(db *sql.DB, version int64) error {
+	_, err := db.Exec("PRAGMA user_version = $1", version)
+	return err
 }
 
 func (s *Sqlite) UserExists(userID string) bool {
@@ -48,19 +95,23 @@ func (s *Sqlite) AddUser(userID string) error {
 	return err
 }
 
+func (s *Sqlite) GetUserPlatformAndDM(userID string) (string, bool, error) {
+	var dm sql.NullBool
+	var platform sql.NullString
+	err := s.db.QueryRow("SELECT platform, should_dm FROM users WHERE id = ?", userID).Scan(&platform, &dm)
+	if err != nil {
+		return "", false, err
+	}
+	if !platform.Valid {
+		return "", dm.Valid && dm.Bool, nil
+	}
+	return platform.String, dm.Valid, nil
+}
+
 func (s *Sqlite) SetUserDM(userID string, dm bool) error {
 	t := time.Now().Unix()
 	_, err := s.db.Exec("UPDATE users SET should_dm = ?, updated_unix = ? WHERE id = ?", dm, t, userID)
 	return err
-}
-
-func (s *Sqlite) GetUserDM(userID string) (bool, error) {
-	var value sql.NullBool
-	err := s.db.QueryRow("SELECT should_dm FROM users WHERE id = ?", userID).Scan(&value)
-	if err != nil {
-		return false, err
-	}
-	return value.Valid && value.Bool, nil
 }
 
 func (s *Sqlite) SetUserPlatform(userID, platform string) error {
@@ -69,16 +120,8 @@ func (s *Sqlite) SetUserPlatform(userID, platform string) error {
 	return err
 }
 
-func (s *Sqlite) GetUserPlatform(userID string) (string, error) {
-	var platform sql.NullString
-	err := s.db.QueryRow("SELECT platform FROM users WHERE id = ?", userID).Scan(&platform)
-	if err != nil {
-		return "", err
-	}
-	if platform.Valid {
-		return platform.String, nil
-	}
-	return "", nil
+func (s *Sqlite) UserCookiesExists(userID string) bool {
+	return s.exists("user_cookies", "user_id", userID)
 }
 
 func (s *Sqlite) EncryptAndSetUserCookies(userID string, cookies []*http.Cookie) error {
@@ -113,6 +156,11 @@ func (s *Sqlite) GetDecryptedUserCookies(userID string) ([]*http.Cookie, error) 
 	return cookies, nil
 }
 
+func (s *Sqlite) DeleteUserCookies(userID string) error {
+	_, err := s.db.Exec("DELETE FROM user_cookies WHERE user_id=?", userID)
+	return err
+}
+
 func (s *Sqlite) CodeExists(code string) bool {
 	return s.exists("shift_codes", "code", code)
 }
@@ -123,25 +171,45 @@ func (s *Sqlite) AddCode(code, game string, userID *string, source *string) erro
 	return err
 }
 
-func (s *Sqlite) SetCodeRewardIfNotSet(code, reward string) (bool, error) {
-	res, err := s.db.Exec("UPDATE shift_codes SET reward = ? WHERE code = ? AND reward IS NULL", reward, code)
+func (s *Sqlite) SetCodeRewardAndSuccess(code, reward string, success bool) (bool, error) {
+	t := time.Now().Unix()
+	tx, err := s.db.BeginTx(context.Background(), nil)
 	if err != nil {
 		return false, err
 	}
+
+	if success {
+		_, err = tx.Exec("UPDATE shift_codes SET success_unix = ? WHERE code = ?", t, code)
+		if err != nil {
+			tx.Rollback()
+			return false, err
+		}
+	}
+	res, err := tx.Exec("UPDATE shift_codes SET reward = ? WHERE code = ? AND reward IS NULL", reward, code)
+	if err != nil {
+		tx.Rollback()
+		return false, err
+	}
+
 	n, err := res.RowsAffected()
 	if err != nil {
+		tx.Rollback()
 		return false, err
 	}
-	return n == 1, nil
+
+	return n == 1, tx.Commit()
 }
 
-func (s *Sqlite) GetCodesNotRedeemedForUser(userID, platform string) ([]string, error) {
+func (s *Sqlite) GetValidCodesNotRedeemedForUser(userID, platform string) ([]string, error) {
 	// grab codes that the user hasn't redeemed for the platform before,
-	// AND, if the code hasn't been marked as expired by anyone
+	// AND, if the code hasn't been marked as expired/invalid before
 
 	// TODO maybe have a minimum threshold on how many expiries have to be marked before we ignore?
-	query := fmt.Sprintf("SELECT sc.code FROM shift_codes sc WHERE NOT EXISTS (SELECT 1 FROM redemptions r WHERE r.code = sc.code AND r.user_id = ? AND r.platform = ?) AND NOT EXISTS (SELECT 1 FROM redemptions rr WHERE rr.code = sc.code AND rr.status = '%s')", shift.EXPIRED)
-	rows, err := s.db.Query(query, userID, platform)
+	query := "SELECT sc.code FROM shift_codes sc WHERE " +
+		"NOT EXISTS (SELECT 1 FROM redemptions r WHERE r.code = sc.code AND r.user_id = ? AND r.platform = ?) AND " +
+		"NOT EXISTS (SELECT 1 FROM redemptions r WHERE r.code = sc.code AND (r.status = ? OR r.status = ?))" +
+		"ORDER BY success_unix DESC" // sort preferentially for the most recently-successful codes
+	rows, err := s.db.Query(query, userID, platform, shift.EXPIRED, shift.NOT_EXIST)
 	if err != nil {
 		return nil, err
 	}
@@ -158,8 +226,8 @@ func (s *Sqlite) GetCodesNotRedeemedForUser(userID, platform string) ([]string, 
 	return codes, nil
 }
 
-func (s *Sqlite) GetAllDecryptedUserCookies() ([]UserCookies, error) {
-	rows, err := s.db.Query("SELECT user_id, encrypted_cookie_json FROM user_cookies")
+func (s *Sqlite) GetAllDecryptedUserCookiesSorted(limit int64) ([]UserCookies, error) {
+	rows, err := s.db.Query("SELECT c.user_id, c.encrypted_cookie_json FROM user_cookies c JOIN users u ON c.user_id = u.id ORDER BY u.redemption_unix LIMIT ?", limit)
 	if err != nil {
 		return nil, err
 	}
@@ -226,8 +294,51 @@ func scanRedemptions(rows *sql.Rows) ([]Redemption, error) {
 
 func (s *Sqlite) AddRedemption(userID, code, platform string, status string) error {
 	t := time.Now().Unix()
-	_, err := s.db.Exec("INSERT INTO redemptions (code, user_id, platform, status, created_unix) VALUES (?, ?, ?, ?, ?)", code, userID, platform, status, t)
-	return err
+	tx, err := s.db.BeginTx(context.Background(), nil)
+	if err != nil {
+		return err
+	}
+	_, err = tx.Exec("INSERT INTO redemptions (code, user_id, platform, status, created_unix) VALUES (?, ?, ?, ?, ?)", code, userID, platform, status, t)
+	if err != nil {
+		tx.Rollback()
+		return err
+	}
+	_, err = tx.Exec("UPDATE users SET redemption_unix = ? WHERE id = ?", t, userID)
+	if err != nil {
+		tx.Rollback()
+		return err
+	}
+	return tx.Commit()
+}
+
+func (s *Sqlite) GetStatistics() (Statistics, error) {
+	var stats Statistics
+	err := s.db.QueryRow(`
+    SELECT 
+        (SELECT COUNT(*) FROM users),
+        (SELECT COUNT(*) FROM users WHERE platform = ?),
+        (SELECT COUNT(*) FROM users WHERE platform = ?),
+        (SELECT COUNT(*) FROM users WHERE platform = ?),
+        (SELECT COUNT(*) FROM users WHERE platform = ?),
+        (SELECT COUNT(*) FROM shift_codes),
+        (SELECT COUNT(*) FROM redemptions WHERE status != ? AND status != ?),
+        (SELECT COUNT(*) FROM redemptions WHERE status = ?)
+`,
+		shift.Steam, shift.Epic, shift.XboxLive, shift.PSN, shift.EXPIRED, shift.NOT_EXIST, shift.SUCCESS,
+	).Scan(
+		&stats.Users,
+		&stats.SteamUsers,
+		&stats.EpicUsers,
+		&stats.XboxUsers,
+		&stats.PsnUsers,
+		&stats.Codes,
+		&stats.Redemptions,
+		&stats.SuccessRedemptions,
+	)
+	if err != nil {
+		return stats, err
+	}
+	return stats, nil
 }
 
 func (s *Sqlite) exists(table, field, value string) bool {

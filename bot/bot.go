@@ -3,7 +3,6 @@ package bot
 import (
 	"log"
 	"strings"
-	"time"
 
 	"github.com/denverquane/slickshift/shift"
 	"github.com/denverquane/slickshift/store"
@@ -15,7 +14,12 @@ const (
 	PrivateResponse   = discordgo.MessageFlagsEphemeral
 	SetPlatformPrefix = "set_platform_"
 	SetDMPrefix       = "set_dm_value"
-	//GithubLink        = "https://github.com/denverquane/slickshift/releases"
+	LogoutPrefix      = "logout_"
+	GithubLink        = "https://github.com/denverquane/slickshift"
+	ThumbsUp          = "👍"
+	X                 = "❌"
+	Lock              = "🔒"
+	Cheer             = "🎉"
 )
 
 const (
@@ -76,138 +80,52 @@ func (bot *Bot) handleSlashCommand(s *discordgo.Session, i *discordgo.Interactio
 }
 
 func (bot *Bot) getSlashResponse(s *discordgo.Session, i *discordgo.InteractionCreate) *discordgo.InteractionResponse {
+	// this is checked in the parent function, so safe to do here
+	userID := i.Member.User.ID
 	if i.Type == discordgo.InteractionApplicationCommand {
 		switch i.ApplicationCommandData().Name {
 		case HELP:
 			return bot.helpResponse(s, i)
 		case SECURITY:
-			// TODO
-			return &discordgo.InteractionResponse{
-				Type: discordgo.InteractionResponseChannelMessageWithSource,
-				Data: &discordgo.InteractionResponseData{
-					Flags:   PrivateResponse,
-					Content: "Super secure, bro. Trust.",
-				},
-			}
+			return bot.securityResponse(s, i)
 		case SETTINGS:
 			return bot.settingsResponse(s, i)
 		case LOGIN:
 			return bot.loginResponse(s, i)
 		case LOGINCOOKIE:
 			return bot.loginCookieResponse(s, i)
+		case LOGOUT:
+			return bot.logoutResponse(s, i)
 		case ADD:
 			code := i.ApplicationCommandData().Options[0].StringValue()
 			if !shift.CodeRegex.MatchString(code) {
-				return &discordgo.InteractionResponse{
-					Type: discordgo.InteractionResponseChannelMessageWithSource,
-					Data: &discordgo.InteractionResponseData{
-						Flags: PrivateResponse,
-						Content: "Hm, doesn't look like you provided a valid SHiFT code. It should look something like:\n\n" +
-							"`XXXX-XXXXX-XXXXX-XXXXX-XXXXX`",
-					},
-				}
+				return privateMessageResponse("Hm, doesn't look like you provided a valid SHiFT code. It should look something like:\n\n" +
+					"`XXXX-XXXXX-XXXXX-XXXXX-XXXXX`")
+
 			}
 			if bot.storage.CodeExists(code) {
-				return &discordgo.InteractionResponse{
-					Type: discordgo.InteractionResponseChannelMessageWithSource,
-					Data: &discordgo.InteractionResponseData{
-						Flags:   PrivateResponse,
-						Content: "It looks like that code already exists!\nThanks anyways!",
-					},
-				}
+				return privateMessageResponse("It looks like that code already exists!\nThanks anyways!")
 			}
 			var src = store.DiscordSource
-			err := bot.storage.AddCode(code, string(shift.Borderlands4), &i.Member.User.ID, &src)
+			err := bot.storage.AddCode(code, string(shift.Borderlands4), &userID, &src)
 			if err != nil {
 				log.Println(err)
 				return nil
 			}
-			return &discordgo.InteractionResponse{
-				Type: discordgo.InteractionResponseChannelMessageWithSource,
-				Data: &discordgo.InteractionResponseData{
-					Flags:   PrivateResponse,
-					Content: "Nice, thanks for adding the code! It should be tested and validated soon!",
-				},
-			}
-		case REDEMPTIONS:
-			values := i.ApplicationCommandData().Options
-			var status string
-			if len(values) > 0 && values[0].BoolValue() {
-				status = shift.SUCCESS
-			}
-			redemptions, err := bot.storage.GetRecentRedemptionsForUser(i.Member.User.ID, status, 3)
-			if err != nil {
-				log.Println(err)
-				return &discordgo.InteractionResponse{
-					Type: discordgo.InteractionResponseChannelMessageWithSource,
-					Data: &discordgo.InteractionResponseData{
-						Flags:   PrivateResponse,
-						Content: "Yikes, I got an error fetching your redemptions. Please try again later.",
-					},
-				}
-			}
-			if len(redemptions) == 0 {
-				return &discordgo.InteractionResponse{
-					Type: discordgo.InteractionResponseChannelMessageWithSource,
-					Data: &discordgo.InteractionResponseData{
-						Flags:   PrivateResponse,
-						Content: "Sorry, I don't have any of those redemptions for you yet!",
-					},
-				}
-			}
-			var embeds []*discordgo.MessageEmbed
-			for _, red := range redemptions {
-				var reward string
-				var color int
-				if red.Reward.Valid {
-					reward = red.Reward.String
-				} else {
-					reward = "*Reward Unknown*"
-				}
-				switch red.Status {
-				case shift.SUCCESS:
-					color = Green
-				case shift.ALREADY_REDEEMED:
-					color = Yellow
-				case shift.NOT_EXIST:
-				case shift.EXPIRED:
-					color = Red
-				}
-				embeds = append(embeds, &discordgo.MessageEmbed{
-					Title: reward,
-					Fields: []*discordgo.MessageEmbedField{
-						{
-							Name:  "Code",
-							Value: red.Code,
-						},
-						//&discordgo.MessageEmbedField{
-						//	Name:  "Game",
-						//	Value: red.Game,
-						//},
-					},
-					Color:       color,
-					Description: red.Status,
-					Timestamp:   time.Unix(red.TimeUnix, 0).UTC().Format(time.RFC3339),
-				})
-			}
-			return &discordgo.InteractionResponse{
-				Type: discordgo.InteractionResponseChannelMessageWithSource,
-				Data: &discordgo.InteractionResponseData{
-					Flags:  PrivateResponse,
-					Embeds: embeds,
-				},
-			}
+			return privateMessageResponse("Nice, thanks for adding the code! It should be tested and validated soon!")
+		case STATS:
+			return bot.statsResponse(s, i)
 		}
 	} else if i.Type == discordgo.InteractionMessageComponent {
-		exists := bot.storage.UserExists(i.Member.User.ID)
+		exists := bot.storage.UserExists(userID)
 		if !exists {
-			err := bot.storage.AddUser(i.Member.User.ID)
+			err := bot.storage.AddUser(userID)
 			if err != nil {
 				log.Println(err)
 				return nil
 			}
 		}
-		oldPlatform, err := bot.storage.GetUserPlatform(i.Member.User.ID)
+		oldPlatform, _, err := bot.storage.GetUserPlatformAndDM(userID)
 		if err != nil {
 			log.Println(err)
 			return nil
@@ -217,7 +135,7 @@ func (bot *Bot) getSlashResponse(s *discordgo.Session, i *discordgo.InteractionC
 			platform := strings.TrimPrefix(id, SetPlatformPrefix)
 
 			// TODO verify the id here
-			err := bot.storage.SetUserPlatform(i.Member.User.ID, platform)
+			err := bot.storage.SetUserPlatform(userID, platform)
 			if err != nil {
 				log.Println(err)
 				return nil
@@ -225,38 +143,22 @@ func (bot *Bot) getSlashResponse(s *discordgo.Session, i *discordgo.InteractionC
 			if !exists || oldPlatform == "" {
 				return registeredUserResponse()
 			}
-			return &discordgo.InteractionResponse{
-				Type: discordgo.InteractionResponseChannelMessageWithSource,
-				Data: &discordgo.InteractionResponseData{
-					Flags:   PrivateResponse,
-					Content: "Got it!\nSet the platform for future redemptions to: `" + strings.Title(platform) + "`",
-				},
-			}
+			return privateMessageResponse("Got it!\nSet the platform for future redemptions to: `" + strings.Title(platform) + "`")
+
 		} else if strings.HasPrefix(id, SetDMPrefix) {
 			value := i.MessageComponentData().Values[0]
 			dm := value == "true"
-			err := bot.storage.SetUserDM(i.Member.User.ID, dm)
+			err := bot.storage.SetUserDM(userID, dm)
 			if err != nil {
-				return &discordgo.InteractionResponse{
-					Type: discordgo.InteractionResponseChannelMessageWithSource,
-					Data: &discordgo.InteractionResponseData{
-						Flags:   PrivateResponse,
-						Content: "Hm, I got an error trying to set your DM preference. Please try again later.",
-					},
-				}
+				return privateMessageResponse("Hm, I got an error trying to set your DM preference. Please try again later.")
 			}
 			if dm {
 				go func() {
-					err = bot.DMUser(i.Member.User.ID, "Hey there!\nWas just confirming I could send you a message.\nThanks!")
+					err = bot.DMUser(userID, "Hey there!\nWas just confirming I could send you a message.\nThanks!")
 					if err != nil {
-						err = s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
-							Type: discordgo.InteractionResponseChannelMessageWithSource,
-							Data: &discordgo.InteractionResponseData{
-								Flags: PrivateResponse,
-								Content: "Hm, doesn't look like I was able to send you a Direct Message... Are you sure you " +
-									"haven’t disabled DMs from server members?",
-							},
-						})
+						err = s.InteractionRespond(i.Interaction, privateMessageResponse("Hm, doesn't look like I was able to send you a Direct Message... "+
+							"Are you sure you haven’t disabled DMs from server members?"),
+						)
 						if err != nil {
 							log.Println(err)
 						}
@@ -266,10 +168,35 @@ func (bot *Bot) getSlashResponse(s *discordgo.Session, i *discordgo.InteractionC
 			return &discordgo.InteractionResponse{
 				Type: discordgo.InteractionResponseDeferredMessageUpdate,
 			}
+		} else if strings.HasPrefix(id, LogoutPrefix) {
+			value := strings.TrimPrefix(id, LogoutPrefix)
+			if value == "true" {
+				err = bot.storage.DeleteUserCookies(userID)
+				if err != nil {
+					log.Println(err)
+					return privateMessageResponse("Hm, I had an issue deleting your cookies. Please try again later.")
+				}
+				msg := privateMessageResponse(ThumbsUp + " You've been successfully logged out!")
+				msg.Data.Components = []discordgo.MessageComponent{}
+				return msg
+			}
+			msg := privateMessageResponse(ThumbsUp)
+			msg.Data.Components = []discordgo.MessageComponent{}
+			return msg
 		}
 	}
 
 	return nil
+}
+
+func privateMessageResponse(content string) *discordgo.InteractionResponse {
+	return &discordgo.InteractionResponse{
+		Type: discordgo.InteractionResponseChannelMessageWithSource,
+		Data: &discordgo.InteractionResponseData{
+			Flags:   PrivateResponse,
+			Content: content,
+		},
+	}
 }
 
 func unregisteredUserResponse() *discordgo.InteractionResponse {
@@ -289,18 +216,13 @@ func unregisteredUserResponse() *discordgo.InteractionResponse {
 }
 
 func registeredUserResponse() *discordgo.InteractionResponse {
-	return &discordgo.InteractionResponse{
-		Type: discordgo.InteractionResponseChannelMessageWithSource,
-		Data: &discordgo.InteractionResponseData{
-			Flags: PrivateResponse,
-			Content: "Success!\nThe next step is to setup authentication with SHiFT so that I " +
-				"can redeem codes for you automatically in the future!\n\n" +
-				"There are two different options available at this time:\n" +
-				"* Provide your SHiFT email/password directly with `/" + LOGIN + "`\n" +
-				"* Provide a Cookie you obtain yourself from the SHiFT website with `/" + LOGINCOOKIE + "`\n\n" +
-				"To see more details about the differences between these two options, try `/" + SECURITY + "`",
-		},
-	}
+	content := "Success!\nThe next step is to setup authentication with SHiFT so that I " +
+		"can redeem codes for you automatically in the future!\n\n" +
+		"There are two different options available at this time:\n" +
+		"* Provide your SHiFT email/password directly with `/" + LOGIN + "`\n" +
+		"* Provide a Cookie you obtain yourself from the SHiFT website with `/" + LOGINCOOKIE + "`\n\n" +
+		"To see more details about the differences between these two options, try `/" + SECURITY + "`"
+	return privateMessageResponse(content)
 }
 
 func (bot *Bot) DMUser(userID, content string) error {

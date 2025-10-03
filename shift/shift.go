@@ -35,6 +35,14 @@ const (
 	Borderlands4 Game = "Borderlands 4"
 )
 
+func ValidGame(g string) bool {
+	switch g {
+	case string(Borderlands4):
+		return true
+	}
+	return false
+}
+
 type Client struct {
 	hClient    httpClient
 	hasCookies bool

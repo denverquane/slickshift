@@ -66,28 +66,16 @@ func main() {
 		log.Fatal(err)
 	}
 
-	go b.StartProcessing(time.Second * 30)
+	go b.StartProcessing(time.Minute)
+
+	go b.StartAPIServer("8080")
 
 	<-sc
-	log.Printf("Received Sigterm or Kill signal. Bot will terminate in 1 second")
+	log.Printf("Received Sigterm or Kill signal. Bot terminating after deleting commands")
 
 	b.DeleteCommands(guildID, cmds)
 	err = b.Stop()
 	if err != nil {
 		log.Fatal(err)
 	}
-
-	//r := gin.Default()
-	//
-	//// Define a simple GET endpoint
-	//r.GET("/ping", func(c *gin.Context) {
-	//	// Return JSON response
-	//	c.JSON(http.StatusOK, gin.H{
-	//		"message": "pong",
-	//	})
-	//})
-	//
-	//// Start server on port 8080 (default)
-	//// Server will listen on 0.0.0.0:8080 (localhost:8080 on Windows)
-	//r.Run()
 }

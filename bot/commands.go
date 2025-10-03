@@ -11,8 +11,9 @@ const (
 	SECURITY    = "security"
 	LOGIN       = "login"
 	LOGINCOOKIE = "login-cookie"
+	LOGOUT      = "logout"
 	ADD         = "add"
-	REDEMPTIONS = "redemptions"
+	STATS       = "stats"
 )
 
 var AllCommands = []*discordgo.ApplicationCommand{
@@ -59,6 +60,10 @@ var AllCommands = []*discordgo.ApplicationCommand{
 		},
 	},
 	{
+		Name:        LOGOUT,
+		Description: "Delete any stored session cookie information for the SHiFT website",
+	},
+	{
 		Name:        ADD,
 		Description: "Add a new SHiFT code",
 		Options: []*discordgo.ApplicationCommandOption{
@@ -73,16 +78,8 @@ var AllCommands = []*discordgo.ApplicationCommand{
 		},
 	},
 	{
-		Name:        REDEMPTIONS,
-		Description: "View recent redemptions SlickShift has performed for you",
-		Options: []*discordgo.ApplicationCommandOption{
-			{
-				Type:        discordgo.ApplicationCommandOptionBoolean,
-				Name:        "successful",
-				Description: "Only retrieve successful redemptions",
-				Required:    false,
-			},
-		},
+		Name:        STATS,
+		Description: "View SlickShift stats and info",
 	},
 }
 
@@ -123,14 +120,14 @@ var PlatformComponents = discordgo.ActionsRow{
 	},
 }
 
-var one = 0
+var zero = 0
 
 var DMComponents = discordgo.ActionsRow{
 	Components: []discordgo.MessageComponent{
 		discordgo.SelectMenu{
 			CustomID:    SetDMPrefix,
 			Placeholder: "Choose one...",
-			MinValues:   &one,
+			MinValues:   &zero,
 			MaxValues:   1,
 			Options: []discordgo.SelectMenuOption{
 				{

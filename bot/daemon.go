@@ -11,14 +11,16 @@ import (
 func (bot *Bot) StartProcessing(interval time.Duration) {
 	for {
 		slog.Info("Beginning processing loop")
-		userCookies, err := bot.storage.GetAllDecryptedUserCookies()
+
+		userCookies, err := bot.storage.GetAllDecryptedUserCookiesSorted(-1)
 		if err != nil {
 			slog.Error("Error getting cookies", "error", err.Error())
+			time.Sleep(interval)
 			continue
 		}
 
 		for _, user := range userCookies {
-			platform, err := bot.storage.GetUserPlatform(user.UserID)
+			platform, dm, err := bot.storage.GetUserPlatformAndDM(user.UserID)
 			if err != nil {
 				slog.Error("Error getting platform", "user_id", user.UserID, "error", err.Error())
 				continue
@@ -27,7 +29,7 @@ func (bot *Bot) StartProcessing(interval time.Duration) {
 				slog.Info("Skipping user with no platform set", "user_id", user.UserID)
 				continue
 			}
-			codes, err := bot.storage.GetCodesNotRedeemedForUser(user.UserID, platform)
+			codes, err := bot.storage.GetValidCodesNotRedeemedForUser(user.UserID, platform)
 			if err != nil {
 				slog.Error("Error getting codes", "error", err.Error())
 				continue
@@ -42,27 +44,27 @@ func (bot *Bot) StartProcessing(interval time.Duration) {
 
 			for _, code := range codes {
 				reward, status, err := bot.redeemCode(client, user, code, shift.Platform(platform))
+				success := status == shift.SUCCESS
 				if err != nil {
 					slog.Error("Error redeeming code", "user_id", user.UserID, "code", code, "platform", platform, "error", err.Error())
 				} else if reward != nil {
-					set, err := bot.storage.SetCodeRewardIfNotSet(code, reward.Title)
+					set, err := bot.storage.SetCodeRewardAndSuccess(code, reward.Title, success)
 					if err != nil {
 						slog.Error("Error setting code reward", "code", code, "reward", reward.Title, "error", err.Error())
 					} else if set {
 						slog.Info("Set reward", "code", code, "reward", reward.Title)
 					}
 				}
-				if status == shift.SUCCESS {
-					str := "I successfully redeemed the code `" + code + "` for you!\n"
+				if success && dm {
+					str := Cheer + " I successfully redeemed `" + code + "` for you! " + Cheer + "\n\n"
 					if reward != nil {
-						str += "Looks like it was for `" + reward.Title + "`\n"
+						str += "Looks like the prize was: `" + reward.Title + "`\n"
 					}
 					err = bot.DMUser(user.UserID, str)
 					if err != nil {
 						slog.Error("Error DMing user", "user_id", user.UserID, "error", err.Error())
 					}
 				}
-
 			}
 		}
 
