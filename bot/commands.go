@@ -6,14 +6,14 @@ import (
 )
 
 const (
-	HELP        = "help"
-	SETTINGS    = "settings"
-	SECURITY    = "security"
-	LOGIN       = "login"
-	LOGINCOOKIE = "login-cookie"
-	LOGOUT      = "logout"
-	ADD         = "add"
-	STATS       = "stats"
+	HELP           = "help"
+	SETTINGS       = "settings"
+	SECURITY       = "security"
+	LOGIN_INSECURE = "login-insecure"
+	LOGIN          = "login"
+	LOGOUT         = "logout"
+	ADD            = "add"
+	STATS          = "stats"
 )
 
 var AllCommands = []*discordgo.ApplicationCommand{
@@ -30,7 +30,7 @@ var AllCommands = []*discordgo.ApplicationCommand{
 		Description: "View information on how SlickShift securely handles your credentials and data",
 	},
 	{
-		Name:        LOGIN,
+		Name:        LOGIN_INSECURE,
 		Description: "Login using your SHiFT credentials",
 		Options: []*discordgo.ApplicationCommandOption{
 			{
@@ -48,14 +48,14 @@ var AllCommands = []*discordgo.ApplicationCommand{
 		},
 	},
 	{
-		Name:        LOGINCOOKIE,
+		Name:        LOGIN,
 		Description: "Authenticate using a Cookie obtained manually from the SHiFT website",
 		Options: []*discordgo.ApplicationCommandOption{
 			{
 				Type:        discordgo.ApplicationCommandOptionString,
 				Name:        "cookie",
 				Description: "Cookie (containing si= and _session_id=) as provided by the SHiFT website",
-				Required:    true,
+				Required:    false,
 			},
 		},
 	},

@@ -91,9 +91,9 @@ func (bot *Bot) getSlashResponse(s *discordgo.Session, i *discordgo.InteractionC
 			return bot.securityResponse(s, i)
 		case SETTINGS:
 			return bot.settingsResponse(s, i)
-		case LOGIN:
+		case LOGIN_INSECURE:
 			return bot.loginResponse(s, i)
-		case LOGINCOOKIE:
+		case LOGIN:
 			return bot.loginCookieResponse(s, i)
 		case LOGOUT:
 			return bot.logoutResponse(s, i)
@@ -220,8 +220,8 @@ func registeredUserResponse() *discordgo.InteractionResponse {
 	content := "Success!\nThe next step is to setup authentication with SHiFT so that I " +
 		"can redeem codes for you automatically in the future!\n\n" +
 		"There are two different options available at this time:\n" +
-		"* Provide your SHiFT email/password directly with `/" + LOGIN + "`\n" +
-		"* Provide a Cookie you obtain yourself from the SHiFT website with `/" + LOGINCOOKIE + "`\n\n" +
+		"* Provide your SHiFT email/password directly with `/" + LOGIN_INSECURE + "`\n" +
+		"* Provide a Cookie you obtain yourself from the SHiFT website with `/" + LOGIN + "`\n\n" +
 		"To see more details about the differences between these two options, try `/" + SECURITY + "`"
 	return privateMessageResponse(content)
 }

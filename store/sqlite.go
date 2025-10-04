@@ -37,7 +37,10 @@ func NewSqliteStore(filepath string, encryptor *Encryptor) (Store, error) {
 	if err != nil {
 		return nil, err
 	}
-	currentVersion := getVersion(db)
+	currentVersion, err := getVersion(db)
+	if err != nil {
+		return nil, err
+	}
 	slog.Info("initialized db", "version", currentVersion)
 
 	err = fs.WalkDir(schemaFS, "sqlite", func(path string, d fs.DirEntry, err error) error {
@@ -68,20 +71,23 @@ func NewSqliteStore(filepath string, encryptor *Encryptor) (Store, error) {
 		}
 		return nil
 	})
+	if err != nil {
+		return nil, err
+	}
 
 	return &Sqlite{db: db, encryptor: encryptor}, nil
 }
 
-func getVersion(db *sql.DB) int64 {
+func getVersion(db *sql.DB) (int64, error) {
 	var version int64
-	err := db.QueryRow("PRAGMA user_version").Scan(&version)
+	err := db.QueryRow("PRAGMA user_version;").Scan(&version)
 	if err != nil {
-		return -1
+		return -1, err
 	}
-	return version
+	return version, nil
 }
 func setVersion(db *sql.DB, version int64) error {
-	_, err := db.Exec("PRAGMA user_version = $1", version)
+	_, err := db.Exec(fmt.Sprintf("PRAGMA user_version = %d;", version))
 	return err
 }
 
