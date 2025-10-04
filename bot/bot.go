@@ -2,6 +2,7 @@ package bot
 
 import (
 	"log"
+	"log/slog"
 	"strings"
 
 	"github.com/denverquane/slickshift/shift"
@@ -241,6 +242,7 @@ func (bot *Bot) RegisterCommands(guildID string) ([]*discordgo.ApplicationComman
 		if err != nil {
 			return nil, err
 		}
+		slog.Info("Registered command", "command", v.Name)
 		cmds[i] = cmd
 	}
 	return cmds, nil

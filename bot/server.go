@@ -10,8 +10,9 @@ import (
 func (bot *Bot) StartAPIServer(port string) {
 	r := gin.Default()
 
-	r.Group("/codes", func(c *gin.Context) {
-		r.POST("/:code", func(c *gin.Context) {
+	codes := r.Group("/codes")
+	{
+		codes.POST("/:code", func(c *gin.Context) {
 			code := c.Param("code")
 
 			game := c.DefaultQuery("game", string(shift.Borderlands4))
@@ -28,6 +29,7 @@ func (bot *Bot) StartAPIServer(port string) {
 				c.JSON(http.StatusConflict, gin.H{"message": "code already exists"})
 				return
 			}
+
 			var sourceAddr *string
 			if source != "" {
 				sourceAddr = &source
@@ -38,9 +40,10 @@ func (bot *Bot) StartAPIServer(port string) {
 				c.JSON(http.StatusInternalServerError, gin.H{"message": err.Error()})
 				return
 			}
+
 			c.JSON(http.StatusCreated, gin.H{"code": code, "game": game, "source": source})
 		})
-	})
+	}
 
 	r.Run(":" + port)
 }
