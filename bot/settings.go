@@ -30,15 +30,10 @@ func (bot *Bot) settingsResponse(s *discordgo.Session, i *discordgo.InteractionC
 		content += "No`"
 	}
 	content += "\n\nFeel free to change your settings using the controls below:"
-	return &discordgo.InteractionResponse{
-		Type: discordgo.InteractionResponseChannelMessageWithSource,
-		Data: &discordgo.InteractionResponseData{
-			Flags: PrivateResponse,
-			Components: []discordgo.MessageComponent{
-				DMComponents,
-				PlatformComponents,
-			},
-			Content: content,
-		},
+	msg := privateMessageResponse(content)
+	msg.Data.Components = []discordgo.MessageComponent{
+		DMComponents,
+		PlatformComponents,
 	}
+	return msg
 }

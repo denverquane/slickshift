@@ -201,19 +201,14 @@ func privateMessageResponse(content string) *discordgo.InteractionResponse {
 }
 
 func unregisteredUserResponse() *discordgo.InteractionResponse {
-	return &discordgo.InteractionResponse{
-		Type: discordgo.InteractionResponseChannelMessageWithSource,
-		Data: &discordgo.InteractionResponseData{
-			Flags: PrivateResponse,
-			Content: "Looks like this is your first time using SlickShift! Welcome!\n\n" +
-				"I'm here to help you automatically redeem SHiFT codes for Borderlands 4!\n\n*To get started:*\n" +
-				settingsSuffix,
-			Components: []discordgo.MessageComponent{
-				DMComponents,
-				PlatformComponents,
-			},
-		},
+	msg := privateMessageResponse("Looks like this is your first time using SlickShift! Welcome!\n\n" +
+		"I'm here to help you automatically redeem SHiFT codes for Borderlands 4!\n\n*To get started:*\n" +
+		settingsSuffix)
+	msg.Data.Components = []discordgo.MessageComponent{
+		DMComponents,
+		PlatformComponents,
 	}
+	return msg
 }
 
 func registeredUserResponse() *discordgo.InteractionResponse {

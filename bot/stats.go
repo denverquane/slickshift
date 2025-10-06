@@ -70,13 +70,8 @@ func (bot *Bot) statsResponse(s *discordgo.Session, i *discordgo.InteractionCrea
 			Color: Green,
 		},
 	}
+	msg := privateMessageResponse("SlickShift Statistics")
+	msg.Data.Embeds = embeds
+	return msg
 	//Timestamp:   time.Unix(red.TimeUnix, 0).UTC().Format(time.RFC3339),
-	return &discordgo.InteractionResponse{
-		Type: discordgo.InteractionResponseChannelMessageWithSource,
-		Data: &discordgo.InteractionResponseData{
-			Content: "SlickShift Statistics",
-			Embeds:  embeds,
-		},
-	}
-
 }
