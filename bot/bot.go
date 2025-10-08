@@ -215,8 +215,8 @@ func registeredUserResponse() *discordgo.InteractionResponse {
 	content := "Success!\nThe next step is to setup authentication with SHiFT so that I " +
 		"can redeem codes for you automatically in the future!\n\n" +
 		"There are two different options available at this time:\n" +
+		"* (Recommended) Provide a Cookie you obtain yourself from the SHiFT website with `/" + LOGIN + "`\n\n" +
 		"* Provide your SHiFT email/password directly with `/" + LOGIN_INSECURE + "`\n" +
-		"* Provide a Cookie you obtain yourself from the SHiFT website with `/" + LOGIN + "`\n\n" +
 		"To see more details about the differences between these two options, try `/" + SECURITY + "`"
 	return privateMessageResponse(content)
 }

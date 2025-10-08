@@ -44,6 +44,9 @@ func (bot *Bot) StartAPIServer(port string) {
 			c.JSON(http.StatusCreated, gin.H{"code": code, "game": game, "source": source})
 		})
 	}
+	r.GET("/", func(c *gin.Context) {
+		c.JSON(http.StatusOK, "Hello, World!")
+	})
 
 	r.Run(":" + port)
 }

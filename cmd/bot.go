@@ -19,6 +19,11 @@ func main() {
 	secretKey := os.Getenv("ENCRYPTION_KEY_B64")
 	token := os.Getenv("DISCORD_BOT_TOKEN")
 	guildID := os.Getenv("DISCORD_GUILD_ID")
+	dbFilePath := os.Getenv("DATABASE_FILE_PATH")
+	if dbFilePath == "" {
+		dbFilePath = "./sqlite.db"
+		log.Println("Database file path not set, defaulting to " + dbFilePath)
+	}
 	if secretKey == "" {
 		log.Fatal("ENCRYPTION_KEY_B64 environment variable not set")
 	}
@@ -36,7 +41,7 @@ func main() {
 		log.Fatal(err)
 	}
 
-	storage, err := store.NewSqliteStore("./sqlite.db", encryptor)
+	storage, err := store.NewSqliteStore(dbFilePath, encryptor)
 	if err != nil {
 		log.Fatal(err)
 	}
