@@ -8,7 +8,7 @@ import (
 	"github.com/denverquane/slickshift/shift"
 )
 
-func (bot *Bot) loginCookieResponse(s *discordgo.Session, i *discordgo.InteractionCreate) *discordgo.InteractionResponse {
+func (bot *Bot) loginCookieResponse(userID string, s *discordgo.Session, i *discordgo.InteractionCreate) *discordgo.InteractionResponse {
 	if len(i.ApplicationCommandData().Options) == 0 {
 		return cookieInstructionsResponse()
 	}
@@ -29,7 +29,7 @@ func (bot *Bot) loginCookieResponse(s *discordgo.Session, i *discordgo.Interacti
 		log.Println(err)
 		return privateMessageResponse("I encountered an error fetching the SHiFT rewards website with your Cookie. Are you sure you copy/pasted it correctly?")
 	}
-	err = bot.storage.EncryptAndSetUserCookies(i.Member.User.ID, newCookies)
+	err = bot.storage.EncryptAndSetUserCookies(userID, newCookies)
 	if err != nil {
 		log.Println(err)
 		return privateMessageResponse("I logged into SHiFT with your info, but I wasn't able to store your session cookies for later...")

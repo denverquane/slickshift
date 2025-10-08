@@ -56,7 +56,17 @@ func (bot *Bot) Start() error {
 }
 
 func (bot *Bot) handleSlashCommand(s *discordgo.Session, i *discordgo.InteractionCreate) {
-	userID := i.Member.User.ID
+	var userID string
+	if i.Member == nil || i.Member.User == nil {
+		if i.User != nil {
+			userID = i.User.ID
+		} else {
+			log.Println("Could not ascertain userID from i.Member.User nor i.User")
+			return
+		}
+	} else {
+		userID = i.Member.User.ID
+	}
 	if userID == "" {
 		log.Println("User ID is empty")
 		return
@@ -71,7 +81,7 @@ func (bot *Bot) handleSlashCommand(s *discordgo.Session, i *discordgo.Interactio
 		return
 	}
 
-	resp := bot.getSlashResponse(s, i)
+	resp := bot.getSlashResponse(userID, s, i)
 	if resp != nil {
 		err := s.InteractionRespond(i.Interaction, resp)
 		if err != nil {
@@ -80,9 +90,7 @@ func (bot *Bot) handleSlashCommand(s *discordgo.Session, i *discordgo.Interactio
 	}
 }
 
-func (bot *Bot) getSlashResponse(s *discordgo.Session, i *discordgo.InteractionCreate) *discordgo.InteractionResponse {
-	// this is checked in the parent function, so safe to do here
-	userID := i.Member.User.ID
+func (bot *Bot) getSlashResponse(userID string, s *discordgo.Session, i *discordgo.InteractionCreate) *discordgo.InteractionResponse {
 	if i.Type == discordgo.InteractionApplicationCommand {
 		switch i.ApplicationCommandData().Name {
 		case HELP:
@@ -90,13 +98,13 @@ func (bot *Bot) getSlashResponse(s *discordgo.Session, i *discordgo.InteractionC
 		case SECURITY:
 			return bot.securityResponse(s, i)
 		case SETTINGS:
-			return bot.settingsResponse(s, i)
+			return bot.settingsResponse(userID, s, i)
 		case LOGIN_INSECURE:
-			return bot.loginResponse(s, i)
+			return bot.loginResponse(userID, s, i)
 		case LOGIN:
-			return bot.loginCookieResponse(s, i)
+			return bot.loginCookieResponse(userID, s, i)
 		case LOGOUT:
-			return bot.logoutResponse(s, i)
+			return bot.logoutResponse(userID, s, i)
 		case ADD:
 			code := i.ApplicationCommandData().Options[0].StringValue()
 			if !shift.CodeRegex.MatchString(code) {
@@ -147,8 +155,10 @@ func (bot *Bot) getSlashResponse(s *discordgo.Session, i *discordgo.InteractionC
 			return privateMessageResponse("Got it!\nSet the platform for future redemptions to: `" + strings.Title(platform) + "`")
 
 		} else if strings.HasPrefix(id, SetDMPrefix) {
-			value := i.MessageComponentData().Values[0]
-			dm := value == "true"
+			if len(i.MessageComponentData().Values) == 0 {
+				return privateMessageResponse("Hm, I couldn't process that. If you're trying to set the DM preference, try with `/" + SETTINGS + "`")
+			}
+			dm := i.MessageComponentData().Values[0] == "true"
 			err := bot.storage.SetUserDM(userID, dm)
 			if err != nil {
 				return privateMessageResponse("Hm, I got an error trying to set your DM preference. Please try again later.")
@@ -163,11 +173,16 @@ func (bot *Bot) getSlashResponse(s *discordgo.Session, i *discordgo.InteractionC
 						if err != nil {
 							log.Println(err)
 						}
+					} else {
+						s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
+							Type: discordgo.InteractionResponseDeferredMessageUpdate,
+						})
 					}
 				}()
-			}
-			return &discordgo.InteractionResponse{
-				Type: discordgo.InteractionResponseDeferredMessageUpdate,
+			} else {
+				return &discordgo.InteractionResponse{
+					Type: discordgo.InteractionResponseDeferredMessageUpdate,
+				}
 			}
 		} else if strings.HasPrefix(id, LogoutPrefix) {
 			value := strings.TrimPrefix(id, LogoutPrefix)
@@ -215,7 +230,7 @@ func registeredUserResponse() *discordgo.InteractionResponse {
 	content := "Success!\nThe next step is to setup authentication with SHiFT so that I " +
 		"can redeem codes for you automatically in the future!\n\n" +
 		"There are two different options available at this time:\n" +
-		"* (Recommended) Provide a Cookie you obtain yourself from the SHiFT website with `/" + LOGIN + "`\n\n" +
+		"* (Recommended) Provide a Cookie you obtain yourself from the SHiFT website with `/" + LOGIN + "`\n" +
 		"* Provide your SHiFT email/password directly with `/" + LOGIN_INSECURE + "`\n" +
 		"To see more details about the differences between these two options, try `/" + SECURITY + "`"
 	return privateMessageResponse(content)

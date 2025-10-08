@@ -10,8 +10,7 @@ import (
 const settingsSuffix = "* Do you want me to message you when I redeem codes for you, or when your login details expire?\n" +
 	"* Also, can you tell me what platform you'd like to auto-redeem SHiFT codes for?\n"
 
-func (bot *Bot) settingsResponse(s *discordgo.Session, i *discordgo.InteractionCreate) *discordgo.InteractionResponse {
-	userID := i.Member.User.ID
+func (bot *Bot) settingsResponse(userID string, s *discordgo.Session, i *discordgo.InteractionCreate) *discordgo.InteractionResponse {
 	platform, shouldDM, err := bot.storage.GetUserPlatformAndDM(userID)
 	if err != nil {
 		log.Println(err)

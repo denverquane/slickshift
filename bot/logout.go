@@ -4,8 +4,8 @@ import (
 	"github.com/bwmarrin/discordgo"
 )
 
-func (bot *Bot) logoutResponse(s *discordgo.Session, i *discordgo.InteractionCreate) *discordgo.InteractionResponse {
-	exists := bot.storage.UserCookiesExists(i.Member.User.ID)
+func (bot *Bot) logoutResponse(userID string, s *discordgo.Session, i *discordgo.InteractionCreate) *discordgo.InteractionResponse {
+	exists := bot.storage.UserCookiesExists(userID)
 	if !exists {
 		return privateMessageResponse("You are not logged in, so I have nothing to logout!")
 	}

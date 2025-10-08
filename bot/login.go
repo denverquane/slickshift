@@ -7,7 +7,7 @@ import (
 	"github.com/denverquane/slickshift/shift"
 )
 
-func (bot *Bot) loginResponse(s *discordgo.Session, i *discordgo.InteractionCreate) *discordgo.InteractionResponse {
+func (bot *Bot) loginResponse(userID string, s *discordgo.Session, i *discordgo.InteractionCreate) *discordgo.InteractionResponse {
 	email := i.ApplicationCommandData().Options[0].StringValue()
 	password := i.ApplicationCommandData().Options[1].StringValue()
 
@@ -23,7 +23,7 @@ func (bot *Bot) loginResponse(s *discordgo.Session, i *discordgo.InteractionCrea
 		return privateMessageResponse("I wasn't able to log you in to SHiFT. Are you sure you provided the right credentials?")
 	}
 	cookies := client.DumpCookies()
-	err = bot.storage.EncryptAndSetUserCookies(i.Member.User.ID, cookies)
+	err = bot.storage.EncryptAndSetUserCookies(userID, cookies)
 	if err != nil {
 		log.Println(err)
 		return privateMessageResponse("I logged into SHiFT with your info, but I wasn't able to store your session cookies for later...")
