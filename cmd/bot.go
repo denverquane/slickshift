@@ -15,14 +15,23 @@ import (
 	"github.com/denverquane/slickshift/store"
 )
 
+// inject with -ldflags when compiling, like
+// -ldflags "-X main.Version=$(git describe --tags "$(git rev-list --tags --max-count=1)" 2>/dev/null || echo 'dev')
+// -X main.Commit=$(git rev-parse --short HEAD)"
+var (
+	Version string
+	Commit  string
+)
+
 func main() {
+	slog.Info("Startup", "version", Version, "commit", Commit)
 	secretKey := os.Getenv("ENCRYPTION_KEY_B64")
 	token := os.Getenv("DISCORD_BOT_TOKEN")
 	guildID := os.Getenv("DISCORD_GUILD_ID")
 	dbFilePath := os.Getenv("DATABASE_FILE_PATH")
 	if dbFilePath == "" {
 		dbFilePath = "./sqlite.db"
-		log.Println("Database file path not set, defaulting to " + dbFilePath)
+		slog.Info("Database file path not set, defaulting to " + dbFilePath)
 	}
 	if secretKey == "" {
 		log.Fatal("ENCRYPTION_KEY_B64 environment variable not set")
@@ -57,7 +66,7 @@ func main() {
 	sc := make(chan os.Signal, 1)
 	signal.Notify(sc, syscall.SIGINT, syscall.SIGTERM, os.Interrupt)
 
-	b, err := bot.CreateNewBot(token, storage)
+	b, err := bot.CreateNewBot(token, storage, Version, Commit)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -66,17 +75,20 @@ func main() {
 		log.Fatal(err)
 	}
 
+	go b.StartAPIServer("8080")
+
 	cmds, err := b.RegisterCommands(guildID)
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	go b.StartProcessing(time.Minute)
+	kill := make(chan bool, 1)
 
-	go b.StartAPIServer("8080")
+	go b.StartUserRedemptionProcessing(time.Minute, kill)
 
 	<-sc
 	log.Printf("Received Sigterm or Kill signal. Bot terminating after deleting commands")
+	kill <- true
 
 	b.DeleteCommands(guildID, cmds)
 	err = b.Stop()

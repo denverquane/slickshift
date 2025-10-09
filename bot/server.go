@@ -44,6 +44,18 @@ func (bot *Bot) StartAPIServer(port string) {
 			c.JSON(http.StatusCreated, gin.H{"code": code, "game": game, "source": source})
 		})
 	}
+	info := r.Group("/info")
+	{
+		info.GET("", func(c *gin.Context) {
+			stats, err := bot.storage.GetStatistics("")
+			if err != nil {
+				c.JSON(http.StatusInternalServerError, gin.H{"message": err.Error()})
+				return
+			}
+			c.JSON(http.StatusOK, stats)
+		})
+	}
+
 	r.GET("/", func(c *gin.Context) {
 		c.JSON(http.StatusOK, "Hello, World!")
 	})

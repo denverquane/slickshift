@@ -20,16 +20,15 @@ type Redemption struct {
 }
 
 type Statistics struct {
-	Users      int64
-	SteamUsers int64
-	EpicUsers  int64
-	XboxUsers  int64
-	PsnUsers   int64
+	Users      int64 `json:"users"`
+	SteamUsers int64 `json:"steam_users"`
+	EpicUsers  int64 `json:"epic_users"`
+	XboxUsers  int64 `json:"xbox_users"`
+	PsnUsers   int64 `json:"psn_users"`
 
-	Codes              int64
-	Redemptions        int64
-	SuccessRedemptions int64
-	PlatformUsers      map[string]int64
+	Codes              int64 `json:"codes"`
+	Redemptions        int64 `json:"redemptions"`
+	SuccessRedemptions int64 `json:"success_redemptions"`
 }
 
 const DiscordSource = "discord"
@@ -55,5 +54,5 @@ type Store interface {
 	GetRecentRedemptionsForUser(userID, status string, quantity int) ([]Redemption, error)
 	AddRedemption(userID, code, platform string, status string) error
 
-	GetStatistics() (Statistics, error)
+	GetStatistics(userID string) (Statistics, error)
 }

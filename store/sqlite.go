@@ -317,7 +317,7 @@ func (s *Sqlite) AddRedemption(userID, code, platform string, status string) err
 	return tx.Commit()
 }
 
-func (s *Sqlite) GetStatistics() (Statistics, error) {
+func (s *Sqlite) GetStatistics(userID string) (Statistics, error) {
 	var stats Statistics
 	err := s.db.QueryRow(`
     SELECT 

@@ -13,7 +13,7 @@ const (
 	LOGIN          = "login"
 	LOGOUT         = "logout"
 	ADD            = "add"
-	STATS          = "stats"
+	INFO           = "info"
 )
 
 var AllCommands = []*discordgo.ApplicationCommand{
@@ -78,7 +78,7 @@ var AllCommands = []*discordgo.ApplicationCommand{
 		},
 	},
 	{
-		Name:        STATS,
+		Name:        INFO,
 		Description: "View SlickShift stats and info",
 	},
 }

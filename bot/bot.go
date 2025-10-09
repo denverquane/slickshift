@@ -32,9 +32,11 @@ const (
 type Bot struct {
 	session *discordgo.Session
 	storage store.Store
+	version string
+	commit  string
 }
 
-func CreateNewBot(token string, storage store.Store) (*Bot, error) {
+func CreateNewBot(token string, storage store.Store, version, commit string) (*Bot, error) {
 	discord, err := discordgo.New("Bot " + token)
 	if err != nil {
 		return nil, err
@@ -43,6 +45,8 @@ func CreateNewBot(token string, storage store.Store) (*Bot, error) {
 	return &Bot{
 		session: discord,
 		storage: storage,
+		version: version,
+		commit:  commit,
 	}, nil
 }
 
@@ -122,8 +126,8 @@ func (bot *Bot) getSlashResponse(userID string, s *discordgo.Session, i *discord
 				return nil
 			}
 			return privateMessageResponse("Nice, thanks for adding the code! It should be tested and validated soon!")
-		case STATS:
-			return bot.statsResponse(s, i)
+		case INFO:
+			return bot.infoResponse(userID, s, i)
 		}
 	} else if i.Type == discordgo.InteractionMessageComponent {
 		exists := bot.storage.UserExists(userID)

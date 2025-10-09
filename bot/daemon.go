@@ -8,67 +8,76 @@ import (
 	"github.com/denverquane/slickshift/store"
 )
 
-func (bot *Bot) StartProcessing(interval time.Duration) {
+func (bot *Bot) StartUserRedemptionProcessing(interval time.Duration, stop <-chan bool) {
+	ticker := time.NewTicker(interval)
+
 	for {
-		slog.Info("Beginning processing loop")
+		select {
+		case <-stop:
+			ticker.Stop()
+			slog.Info("User code redemption processing stopped")
+			return
 
-		userCookies, err := bot.storage.GetAllDecryptedUserCookiesSorted(-1)
-		if err != nil {
-			slog.Error("Error getting cookies", "error", err.Error())
-			time.Sleep(interval)
-			continue
-		}
-
-		for _, user := range userCookies {
-			platform, dm, err := bot.storage.GetUserPlatformAndDM(user.UserID)
+		case <-ticker.C:
+			slog.Info("Started user code redemption processing")
+			userCookies, err := bot.storage.GetAllDecryptedUserCookiesSorted(-1)
 			if err != nil {
-				slog.Error("Error getting platform", "user_id", user.UserID, "error", err.Error())
-				continue
+				slog.Error("Error getting cookies", "error", err.Error())
+				break
 			}
-			if platform == "" {
-				slog.Info("Skipping user with no platform set", "user_id", user.UserID)
-				continue
-			}
-			codes, err := bot.storage.GetValidCodesNotRedeemedForUser(user.UserID, platform)
-			if err != nil {
-				slog.Error("Error getting codes", "error", err.Error())
-				continue
-			}
-			slog.Debug("Retrieved unredeemed codes", "user_id", user.UserID, "codes", len(codes))
+			slog.Info("Retrieved decrypted user cookies", "count", len(userCookies))
 
-			client, err := shift.NewClient(user.Cookies)
-			if err != nil {
-				slog.Error("Error creating shift client", "user_id", user.UserID, "error", err.Error())
-				continue
-			}
-
-			for _, code := range codes {
-				reward, status, err := bot.redeemCode(client, user, code, shift.Platform(platform))
-				success := status == shift.SUCCESS
+			for _, user := range userCookies {
+				platform, dm, err := bot.storage.GetUserPlatformAndDM(user.UserID)
 				if err != nil {
-					slog.Error("Error redeeming code", "user_id", user.UserID, "code", code, "platform", platform, "error", err.Error())
-				} else if reward != nil {
-					set, err := bot.storage.SetCodeRewardAndSuccess(code, reward.Title, success)
-					if err != nil {
-						slog.Error("Error setting code reward", "code", code, "reward", reward.Title, "error", err.Error())
-					} else if set {
-						slog.Info("Set reward", "code", code, "reward", reward.Title)
-					}
+					slog.Error("Error getting platform", "user_id", user.UserID, "error", err.Error())
+					continue
 				}
-				if success && dm {
-					str := Cheer + " I successfully redeemed `" + code + "` for you! " + Cheer + "\n\n"
-					if reward != nil {
-						str += "Looks like the prize was: `" + reward.Title + "`\n"
-					}
-					err = bot.DMUser(user.UserID, str)
+				if platform == "" {
+					slog.Debug("Skipping user with no platform set", "user_id", user.UserID)
+					continue
+				}
+				codes, err := bot.storage.GetValidCodesNotRedeemedForUser(user.UserID, platform)
+				if err != nil {
+					slog.Error("Error getting codes", "error", err.Error())
+					continue
+				}
+				slog.Debug("Retrieved unredeemed codes", "user_id", user.UserID, "codes", len(codes))
+
+				client, err := shift.NewClient(user.Cookies)
+				if err != nil {
+					slog.Error("Error creating shift client", "user_id", user.UserID, "error", err.Error())
+					continue
+				}
+
+				for _, code := range codes {
+					reward, status, err := bot.redeemCode(client, user, code, shift.Platform(platform))
+					success := status == shift.SUCCESS
 					if err != nil {
-						slog.Error("Error DMing user", "user_id", user.UserID, "error", err.Error())
+						slog.Error("Error redeeming code", "user_id", user.UserID, "code", code, "platform", platform, "error", err.Error())
+					} else if reward != nil {
+						set, err := bot.storage.SetCodeRewardAndSuccess(code, reward.Title, success)
+						if err != nil {
+							slog.Error("Error setting code reward", "code", code, "reward", reward.Title, "error", err.Error())
+						} else if set {
+							slog.Info("Set reward", "code", code, "reward", reward.Title)
+						}
+					}
+					if success && dm {
+						str := Cheer + " I successfully redeemed `" + code + "` for you! " + Cheer + "\n\n"
+						if reward != nil {
+							str += "Looks like the prize was: `" + reward.Title + "`\n"
+						}
+						err = bot.DMUser(user.UserID, str)
+						if err != nil {
+							slog.Error("Error DMing user", "user_id", user.UserID, "error", err.Error())
+						} else {
+							slog.Debug("DMed user", "user_id", user.UserID)
+						}
 					}
 				}
 			}
 		}
-
-		time.Sleep(interval)
 	}
 }
 

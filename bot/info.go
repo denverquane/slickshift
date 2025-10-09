@@ -6,8 +6,8 @@ import (
 	"github.com/bwmarrin/discordgo"
 )
 
-func (bot *Bot) statsResponse(s *discordgo.Session, i *discordgo.InteractionCreate) *discordgo.InteractionResponse {
-	stats, err := bot.storage.GetStatistics()
+func (bot *Bot) infoResponse(userID string, s *discordgo.Session, i *discordgo.InteractionCreate) *discordgo.InteractionResponse {
+	stats, err := bot.storage.GetStatistics(userID)
 	if err != nil {
 		return privateMessageResponse("Hm, I got an error fetching statistics. Please try again later.")
 	}
@@ -71,6 +71,10 @@ func (bot *Bot) statsResponse(s *discordgo.Session, i *discordgo.InteractionCrea
 		},
 	}
 	msg := privateMessageResponse("SlickShift Statistics")
+
+	embeds[len(embeds)-1].Footer = &discordgo.MessageEmbedFooter{
+		Text: bot.version + "-" + bot.commit,
+	}
 	msg.Data.Embeds = embeds
 	return msg
 	//Timestamp:   time.Unix(red.TimeUnix, 0).UTC().Format(time.RFC3339),
