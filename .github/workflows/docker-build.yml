@@ -35,13 +35,13 @@ jobs:
           echo "owner=$OWNER_LC" >> $GITHUB_OUTPUT
           echo "repo_name=$REPO_NAME" >> $GITHUB_OUTPUT
 
-      - name: Log in to GitHub Container Registry
+      - name: Log in to Dockerhub
         if: ${{ github.repository_owner == 'denverquane' }}
         uses: docker/login-action@v3
         with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
+          registry: registry-1.docker.io
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
 
       - name: Build and push multi-arch image
         uses: docker/build-push-action@v6
@@ -49,11 +49,11 @@ jobs:
           context: .
           platforms: linux/amd64,linux/arm64
           push: ${{ github.repository_owner == 'denverquane' }}
-          tags: ghcr.io/${{ steps.vars.outputs.owner }}/${{ steps.vars.outputs.repo_name }}:latest
+          tags: registry-1.docker.io/${{ steps.vars.outputs.owner }}/${{ steps.vars.outputs.repo_name }}:latest
 
       - name: Push extra tag (branch or release tag)
         if: ${{ github.repository_owner == 'denverquane' && steps.vars.outputs.raw_name != 'main' }}
         run: |
           docker buildx imagetools create \
-            --tag ghcr.io/${{ steps.vars.outputs.owner }}/${{ steps.vars.outputs.repo_name }}:${{ steps.vars.outputs.safe_name }} \
-            ghcr.io/${{ steps.vars.outputs.owner }}/${{ steps.vars.outputs.repo_name }}:latest
+            --tag registry-1.docker.io/${{ steps.vars.outputs.owner }}/${{ steps.vars.outputs.repo_name }}:${{ steps.vars.outputs.safe_name }} \
+            registry-1.docker.io/${{ steps.vars.outputs.owner }}/${{ steps.vars.outputs.repo_name }}:latest
