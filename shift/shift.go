@@ -17,11 +17,28 @@ import (
 type Platform string
 
 const (
+	Total    Platform = "total"
 	Steam    Platform = "steam"
 	Epic     Platform = "epic"
 	XboxLive Platform = "xboxlive"
 	PSN      Platform = "psn"
 )
+
+func ToPretty(p Platform) string {
+	switch p {
+	case Total:
+		return "Total"
+	case Steam:
+		return "Steam"
+	case Epic:
+		return "Epic"
+	case XboxLive:
+		return "Xbox"
+	case PSN:
+		return "PSN"
+	}
+	return ""
+}
 
 //type Title string
 //

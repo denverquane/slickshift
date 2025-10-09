@@ -174,7 +174,10 @@ func (s *Sqlite) CodeExists(code string) bool {
 func (s *Sqlite) AddCode(code, game string, userID *string, source *string) error {
 	t := time.Now().Unix()
 	_, err := s.db.Exec("INSERT OR IGNORE INTO shift_codes (code, game, user_id, source, created_unix) VALUES (?, ?, ?, ?, ?)", code, game, userID, source, t)
-	return err
+	if err != nil {
+		return err
+	}
+	return nil
 }
 
 func (s *Sqlite) SetCodeRewardAndSuccess(code, reward string, success bool) (bool, error) {
@@ -319,6 +322,7 @@ func (s *Sqlite) AddRedemption(userID, code, platform string, status string) err
 
 func (s *Sqlite) GetStatistics(userID string) (Statistics, error) {
 	var stats Statistics
+	var total, steam, epic, xbox, psn int64
 	err := s.db.QueryRow(`
     SELECT 
         (SELECT COUNT(*) FROM users),
@@ -332,17 +336,24 @@ func (s *Sqlite) GetStatistics(userID string) (Statistics, error) {
 `,
 		shift.Steam, shift.Epic, shift.XboxLive, shift.PSN, shift.EXPIRED, shift.NOT_EXIST, shift.SUCCESS,
 	).Scan(
-		&stats.Users,
-		&stats.SteamUsers,
-		&stats.EpicUsers,
-		&stats.XboxUsers,
-		&stats.PsnUsers,
+		&total,
+		&steam,
+		&epic,
+		&xbox,
+		&psn,
 		&stats.Codes,
 		&stats.Redemptions,
 		&stats.SuccessRedemptions,
 	)
 	if err != nil {
 		return stats, err
+	}
+	stats.Users = map[shift.Platform]int64{
+		"total":        total,
+		shift.Steam:    steam,
+		shift.Epic:     epic,
+		shift.XboxLive: xbox,
+		shift.PSN:      psn,
 	}
 	return stats, nil
 }
@@ -356,4 +367,8 @@ func (s *Sqlite) exists(table, field, value string) bool {
 		return false
 	}
 	return exists
+}
+
+func (s *Sqlite) Close() error {
+	return s.db.Close()
 }

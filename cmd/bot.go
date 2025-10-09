@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"os"
 	"os/signal"
+	"strconv"
 	"syscall"
 	"time"
 
@@ -24,10 +25,20 @@ var (
 )
 
 func main() {
-	slog.Info("Startup", "version", Version, "commit", Commit)
 	secretKey := os.Getenv("ENCRYPTION_KEY_B64")
 	token := os.Getenv("DISCORD_BOT_TOKEN")
 	guildID := os.Getenv("DISCORD_GUILD_ID")
+	redeemInterval := os.Getenv("REDEEM_INTERVAL")
+	if redeemInterval == "" {
+		redeemInterval = "5"
+		slog.Info("No REDEEM_INTERVAL set, defaulting to " + redeemInterval)
+	}
+	redeemIntervalInt, err := strconv.Atoi(redeemInterval)
+	if err != nil {
+		log.Fatalf("Error parsing REDEEM_INTERVAL: %v", err)
+	} else if redeemIntervalInt < 1 {
+		log.Fatalf("REDEEM_INTERVAL cannot be less than 1")
+	}
 	dbFilePath := os.Getenv("DATABASE_FILE_PATH")
 	if dbFilePath == "" {
 		dbFilePath = "./sqlite.db"
@@ -44,6 +55,15 @@ func main() {
 	if token == "" {
 		log.Fatal("DISCORD_BOT_TOKEN environment variable not set")
 	}
+	slog.Info("Env",
+		"Version", Version,
+		"Commit", Commit,
+		"DATABASE_FILE_PATH", dbFilePath,
+		"REDEEM_INTERVAL", redeemIntervalInt,
+		"DISCORD_GUILD_ID", guildID,
+		"DISCORD_BOT_TOKEN", "<redacted>",
+		"ENCRYPTION_KEY_B64", "<redacted>",
+	)
 
 	encryptor, err := store.NewEncryptor(secretKeyBytes)
 	if err != nil {
@@ -84,7 +104,7 @@ func main() {
 
 	kill := make(chan bool, 1)
 
-	go b.StartUserRedemptionProcessing(time.Minute, kill)
+	go b.StartUserRedemptionProcessing(time.Minute*time.Duration(redeemIntervalInt), kill)
 
 	<-sc
 	log.Printf("Received Sigterm or Kill signal. Bot terminating after deleting commands")

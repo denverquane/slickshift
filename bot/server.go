@@ -40,6 +40,8 @@ func (bot *Bot) StartAPIServer(port string) {
 				c.JSON(http.StatusInternalServerError, gin.H{"message": err.Error()})
 				return
 			}
+			// trigger reprocessing because we got a new code
+			bot.triggerRedemptionProcessing("")
 
 			c.JSON(http.StatusCreated, gin.H{"code": code, "game": game, "source": source})
 		})

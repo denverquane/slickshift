@@ -30,10 +30,11 @@ const (
 )
 
 type Bot struct {
-	session *discordgo.Session
-	storage store.Store
-	version string
-	commit  string
+	session           *discordgo.Session
+	storage           store.Store
+	redemptionTrigger chan string
+	version           string
+	commit            string
 }
 
 func CreateNewBot(token string, storage store.Store, version, commit string) (*Bot, error) {
@@ -43,10 +44,11 @@ func CreateNewBot(token string, storage store.Store, version, commit string) (*B
 	}
 
 	return &Bot{
-		session: discord,
-		storage: storage,
-		version: version,
-		commit:  commit,
+		session:           discord,
+		storage:           storage,
+		redemptionTrigger: make(chan string),
+		version:           version,
+		commit:            commit,
 	}, nil
 }
 
@@ -125,6 +127,9 @@ func (bot *Bot) getSlashResponse(userID string, s *discordgo.Session, i *discord
 				log.Println(err)
 				return nil
 			}
+			// trigger reprocessing because a new code was added
+			bot.triggerRedemptionProcessing("")
+
 			return privateMessageResponse("Nice, thanks for adding the code! It should be tested and validated soon!")
 		case INFO:
 			return bot.infoResponse(userID, s, i)
@@ -271,6 +276,14 @@ func (bot *Bot) DeleteCommands(guildID string, cmds []*discordgo.ApplicationComm
 	}
 }
 
+func (bot *Bot) triggerRedemptionProcessing(userID string) {
+	bot.redemptionTrigger <- userID
+}
+
 func (bot *Bot) Stop() error {
+	err := bot.storage.Close()
+	if err != nil {
+		slog.Error("Error closing storage", "error", err)
+	}
 	return bot.session.Close()
 }

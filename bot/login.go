@@ -28,5 +28,6 @@ func (bot *Bot) loginResponse(userID string, s *discordgo.Session, i *discordgo.
 		log.Println(err)
 		return privateMessageResponse("I logged into SHiFT with your info, but I wasn't able to store your session cookies for later...")
 	}
+	bot.triggerRedemptionProcessing(userID)
 	return privateMessageResponse(Cheer + " Success! " + Cheer + "\n\nI've securely stored your session cookies (and purged your email/password) for automatic SHiFT code redemption!")
 }

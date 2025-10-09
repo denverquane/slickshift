@@ -2,6 +2,7 @@ package store
 
 import (
 	"database/sql"
+	"github.com/denverquane/slickshift/shift"
 	"net/http"
 )
 
@@ -20,11 +21,7 @@ type Redemption struct {
 }
 
 type Statistics struct {
-	Users      int64 `json:"users"`
-	SteamUsers int64 `json:"steam_users"`
-	EpicUsers  int64 `json:"epic_users"`
-	XboxUsers  int64 `json:"xbox_users"`
-	PsnUsers   int64 `json:"psn_users"`
+	Users map[shift.Platform]int64 `json:"users"`
 
 	Codes              int64 `json:"codes"`
 	Redemptions        int64 `json:"redemptions"`
@@ -55,4 +52,6 @@ type Store interface {
 	AddRedemption(userID, code, platform string, status string) error
 
 	GetStatistics(userID string) (Statistics, error)
+
+	Close() error
 }
