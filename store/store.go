@@ -2,7 +2,6 @@ package store
 
 import (
 	"database/sql"
-	"github.com/denverquane/slickshift/shift"
 	"net/http"
 )
 
@@ -21,11 +20,9 @@ type Redemption struct {
 }
 
 type Statistics struct {
-	Users map[shift.Platform]int64 `json:"users"`
-
-	Codes              int64 `json:"codes"`
-	Redemptions        int64 `json:"redemptions"`
-	SuccessRedemptions int64 `json:"success_redemptions"`
+	Users       map[string]int64 `json:"users"`
+	Codes       map[string]int64 `json:"codes"`
+	Redemptions map[string]int64 `json:"redemptions"`
 }
 
 const DiscordSource = "discord"

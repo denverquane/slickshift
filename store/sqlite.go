@@ -322,7 +322,9 @@ func (s *Sqlite) AddRedemption(userID, code, platform string, status string) err
 
 func (s *Sqlite) GetStatistics(userID string) (Statistics, error) {
 	var stats Statistics
-	var total, steam, epic, xbox, psn int64
+	var totalUsers, steam, epic, xbox, psn int64
+	var totalRedeem, expired, already, success int64
+	var totalCodes, goldenKey, other, unknown int64
 	err := s.db.QueryRow(`
     SELECT 
         (SELECT COUNT(*) FROM users),
@@ -331,29 +333,60 @@ func (s *Sqlite) GetStatistics(userID string) (Statistics, error) {
         (SELECT COUNT(*) FROM users WHERE platform = ?),
         (SELECT COUNT(*) FROM users WHERE platform = ?),
         (SELECT COUNT(*) FROM shift_codes),
-        (SELECT COUNT(*) FROM redemptions WHERE status != ? AND status != ?),
+        (SELECT COUNT(*) FROM shift_codes WHERE reward = ?),
+        (SELECT COUNT(*) FROM shift_codes WHERE reward IS NOT NULL AND reward != ?),
+        (SELECT COUNT(*) FROM shift_codes WHERE reward IS NULL),
+        (SELECT COUNT(*) FROM redemptions),
+        (SELECT COUNT(*) FROM redemptions WHERE status = ?),
+        (SELECT COUNT(*) FROM redemptions WHERE status = ?),                                      
         (SELECT COUNT(*) FROM redemptions WHERE status = ?)
 `,
-		shift.Steam, shift.Epic, shift.XboxLive, shift.PSN, shift.EXPIRED, shift.NOT_EXIST, shift.SUCCESS,
+		shift.Steam, shift.Epic, shift.XboxLive, shift.PSN,
+
+		shift.GoldenKey,
+		shift.GoldenKey,
+
+		shift.EXPIRED,
+		shift.ALREADY_REDEEMED,
+		shift.SUCCESS,
 	).Scan(
-		&total,
+		&totalUsers,
 		&steam,
 		&epic,
 		&xbox,
 		&psn,
-		&stats.Codes,
-		&stats.Redemptions,
-		&stats.SuccessRedemptions,
+
+		&totalCodes,
+		&goldenKey,
+		&other,
+		&unknown,
+
+		&totalRedeem,
+		&expired,
+		&already,
+		&success,
 	)
 	if err != nil {
 		return stats, err
 	}
-	stats.Users = map[shift.Platform]int64{
-		"total":        total,
-		shift.Steam:    steam,
-		shift.Epic:     epic,
-		shift.XboxLive: xbox,
-		shift.PSN:      psn,
+	stats.Users = map[string]int64{
+		"total": totalUsers,
+		"steam": steam,
+		"epic":  epic,
+		"xbox":  xbox,
+		"psn":   psn,
+	}
+	stats.Codes = map[string]int64{
+		"total":      totalCodes,
+		"golden_key": goldenKey,
+		"other":      other,
+		"unknown":    unknown,
+	}
+	stats.Redemptions = map[string]int64{
+		"total":            totalRedeem,
+		"expired":          expired,
+		"already_redeemed": already,
+		"success":          success,
 	}
 	return stats, nil
 }

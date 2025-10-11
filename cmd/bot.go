@@ -29,13 +29,24 @@ func main() {
 	token := os.Getenv("DISCORD_BOT_TOKEN")
 	guildID := os.Getenv("DISCORD_GUILD_ID")
 	redeemInterval := os.Getenv("REDEEM_INTERVAL")
+	apiServerPort := os.Getenv("API_SERVER_PORT")
+
+	if apiServerPort == "" {
+		apiServerPort = "8080"
+		slog.Info("No API_SERVER_PORT set, defaulting to " + apiServerPort)
+	}
+	_, err := strconv.ParseInt(apiServerPort, 10, 64)
+	if err != nil {
+		log.Fatalf("Error parsing API_SERVER_PORT: %s", err.Error())
+	}
+
 	if redeemInterval == "" {
 		redeemInterval = "5"
-		slog.Info("No REDEEM_INTERVAL set, defaulting to " + redeemInterval)
+		slog.Info("No REDEEM_INTERVAL set, defaulting to " + redeemInterval + " (minutes)")
 	}
 	redeemIntervalInt, err := strconv.Atoi(redeemInterval)
 	if err != nil {
-		log.Fatalf("Error parsing REDEEM_INTERVAL: %v", err)
+		log.Fatalf("Error parsing REDEEM_INTERVAL: %s", err.Error())
 	} else if redeemIntervalInt < 1 {
 		log.Fatalf("REDEEM_INTERVAL cannot be less than 1")
 	}
@@ -44,6 +55,7 @@ func main() {
 		dbFilePath = "./sqlite.db"
 		slog.Info("Database file path not set, defaulting to " + dbFilePath)
 	}
+
 	if secretKey == "" {
 		log.Fatal("ENCRYPTION_KEY_B64 environment variable not set")
 	}
@@ -55,12 +67,14 @@ func main() {
 	if token == "" {
 		log.Fatal("DISCORD_BOT_TOKEN environment variable not set")
 	}
-	slog.Info("Env",
+
+	slog.Info("Environment: ",
 		"Version", Version,
 		"Commit", Commit,
 		"DATABASE_FILE_PATH", dbFilePath,
 		"REDEEM_INTERVAL", redeemIntervalInt,
 		"DISCORD_GUILD_ID", guildID,
+		"API_SERVER_PORT", apiServerPort,
 		"DISCORD_BOT_TOKEN", "<redacted>",
 		"ENCRYPTION_KEY_B64", "<redacted>",
 	)
@@ -74,6 +88,9 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
+
+	// TODO more rigorous checks re: db file permissions here
+	// "failed to write a read-only database" constitutes a fatal error that should panic
 
 	codes := data.DefaultBL4Codes()
 	for code := range codes {
@@ -95,7 +112,7 @@ func main() {
 		log.Fatal(err)
 	}
 
-	go b.StartAPIServer("8080")
+	go b.StartAPIServer(apiServerPort)
 
 	cmds, err := b.RegisterCommands(guildID)
 	if err != nil {

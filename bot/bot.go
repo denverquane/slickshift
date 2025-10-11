@@ -5,7 +5,6 @@ import (
 	"log/slog"
 	"strings"
 
-	"github.com/denverquane/slickshift/shift"
 	"github.com/denverquane/slickshift/store"
 
 	"github.com/bwmarrin/discordgo"
@@ -17,6 +16,10 @@ const (
 	SetDMPrefix       = "set_dm_value"
 	LogoutPrefix      = "logout_"
 	GithubLink        = "https://github.com/denverquane/slickshift"
+	SecurityLink      = GithubLink + "/blob/main/SECURITY.md"
+	LiabilityLink     = GithubLink + "/blob/main/LIABILITY.md"
+	ServerLink        = "https://discord.gg/GDSsKcrPxp"
+	BotInviteLink     = "https://discord.com/oauth2/authorize?client_id=1420238749270544547&permissions=0&integration_type=0&scope=bot"
 	ThumbsUp          = "👍"
 	X                 = "❌"
 	Lock              = "🔒"
@@ -101,8 +104,6 @@ func (bot *Bot) getSlashResponse(userID string, s *discordgo.Session, i *discord
 		switch i.ApplicationCommandData().Name {
 		case HELP:
 			return bot.helpResponse(s, i)
-		case SECURITY:
-			return bot.securityResponse(s, i)
 		case SETTINGS:
 			return bot.settingsResponse(userID, s, i)
 		case LOGIN_INSECURE:
@@ -112,25 +113,7 @@ func (bot *Bot) getSlashResponse(userID string, s *discordgo.Session, i *discord
 		case LOGOUT:
 			return bot.logoutResponse(userID, s, i)
 		case ADD:
-			code := i.ApplicationCommandData().Options[0].StringValue()
-			if !shift.CodeRegex.MatchString(code) {
-				return privateMessageResponse("Hm, doesn't look like you provided a valid SHiFT code. It should look something like:\n\n" +
-					"`XXXX-XXXXX-XXXXX-XXXXX-XXXXX`")
-
-			}
-			if bot.storage.CodeExists(code) {
-				return privateMessageResponse("It looks like that code already exists!\nThanks anyways!")
-			}
-			var src = store.DiscordSource
-			err := bot.storage.AddCode(code, string(shift.Borderlands4), &userID, &src)
-			if err != nil {
-				log.Println(err)
-				return nil
-			}
-			// trigger reprocessing because a new code was added
-			bot.triggerRedemptionProcessing("")
-
-			return privateMessageResponse("Nice, thanks for adding the code! It should be tested and validated soon!")
+			return bot.addResponse(userID, s, i)
 		case INFO:
 			return bot.infoResponse(userID, s, i)
 		}
@@ -152,12 +135,12 @@ func (bot *Bot) getSlashResponse(userID string, s *discordgo.Session, i *discord
 		if strings.HasPrefix(id, SetPlatformPrefix) {
 			platform := strings.TrimPrefix(id, SetPlatformPrefix)
 
-			// TODO verify the id here
 			err := bot.storage.SetUserPlatform(userID, platform)
 			if err != nil {
 				log.Println(err)
 				return nil
 			}
+			// if they set the platform for the first time, or are a new user, then send a different response
 			if !exists || oldPlatform == "" {
 				return registeredUserResponse()
 			}
@@ -176,8 +159,10 @@ func (bot *Bot) getSlashResponse(userID string, s *discordgo.Session, i *discord
 				go func() {
 					err = bot.DMUser(userID, "Hey there!\nWas just confirming I could send you a message.\nThanks!")
 					if err != nil {
-						err = s.InteractionRespond(i.Interaction, privateMessageResponse("Hm, doesn't look like I was able to send you a Direct Message... "+
-							"Are you sure you haven’t disabled DMs from server members?"),
+						err = s.InteractionRespond(i.Interaction, privateMessageResponse(
+							"Hm, doesn't look like I was able to send you a Direct Message...\n"+
+								"Do you have the Discord Setting \"Allow Direct Messages from Server Members\" enabled?\n"+
+								"You'll need it enabled for whatever server(s) you and I are both members of."),
 						)
 						if err != nil {
 							log.Println(err)
@@ -229,19 +214,19 @@ func unregisteredUserResponse() *discordgo.InteractionResponse {
 		"I'm here to help you automatically redeem SHiFT codes for Borderlands 4!\n\n*To get started:*\n" +
 		settingsSuffix)
 	msg.Data.Components = []discordgo.MessageComponent{
-		DMComponents,
-		PlatformComponents,
+		getDMComponents(false, false),
+		getPlatformComponents(false, ""),
 	}
 	return msg
 }
 
 func registeredUserResponse() *discordgo.InteractionResponse {
-	content := "Success!\nThe next step is to setup authentication with SHiFT so that I " +
-		"can redeem codes for you automatically in the future!\n\n" +
-		"There are two different options available at this time:\n" +
+	content := Cheer + "  Success!  " + Cheer + "\n\n" +
+		"The next step is to setup authentication with SHiFT so that I can redeem codes for you automatically in the future:\n" +
 		"* (Recommended) Provide a Cookie you obtain yourself from the SHiFT website with `/" + LOGIN + "`\n" +
-		"* Provide your SHiFT email/password directly with `/" + LOGIN_INSECURE + "`\n" +
-		"To see more details about the differences between these two options, try `/" + SECURITY + "`"
+		"* Provide your SHiFT email/password directly with `/" + LOGIN_INSECURE + "`\n\n" +
+		"To see more details about the differences between these two options, see [SECURITY.md](" + SecurityLink + ")\n" +
+		"** By logging in and continuing to use SlickShift, you agree to the [Liability Disclosure](" + LiabilityLink + ")**"
 	return privateMessageResponse(content)
 }
 
@@ -276,6 +261,7 @@ func (bot *Bot) DeleteCommands(guildID string, cmds []*discordgo.ApplicationComm
 	}
 }
 
+// trigger redemption processing for whatever userID was provided. If empty, triggers for all users
 func (bot *Bot) triggerRedemptionProcessing(userID string) {
 	bot.redemptionTrigger <- userID
 }

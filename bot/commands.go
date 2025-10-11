@@ -8,7 +8,6 @@ import (
 const (
 	HELP           = "help"
 	SETTINGS       = "settings"
-	SECURITY       = "security"
 	LOGIN_INSECURE = "login-insecure"
 	LOGIN          = "login"
 	LOGOUT         = "logout"
@@ -24,10 +23,6 @@ var AllCommands = []*discordgo.ApplicationCommand{
 	{
 		Name:        SETTINGS,
 		Description: "View and/or change the settings used for redeeming SHiFT codes",
-	},
-	{
-		Name:        SECURITY,
-		Description: "View information on how SlickShift securely handles your credentials and data",
 	},
 	{
 		Name:        LOGIN_INSECURE,
@@ -83,68 +78,83 @@ var AllCommands = []*discordgo.ApplicationCommand{
 	},
 }
 
-var PlatformComponents = discordgo.ActionsRow{
-	Components: []discordgo.MessageComponent{
-		discordgo.Button{
-			Label: "Steam",
-			Style: discordgo.PrimaryButton,
-			//Emoji: &discordgo.ComponentEmoji{
-			//	Name: ,
-			//},
-			CustomID: SetPlatformPrefix + string(shift.Steam),
+func getPlatformComponents(hasValue bool, value string) discordgo.ActionsRow {
+	return discordgo.ActionsRow{
+		Components: []discordgo.MessageComponent{
+			discordgo.Button{
+				Label:    "Steam",
+				Style:    discordgo.PrimaryButton,
+				Disabled: hasValue && value == string(shift.Steam),
+				//Emoji: &discordgo.ComponentEmoji{
+				//	Name: ,
+				//},
+				CustomID: SetPlatformPrefix + string(shift.Steam),
+			},
+			discordgo.Button{
+				Label:    "Epic",
+				Style:    discordgo.PrimaryButton,
+				Disabled: hasValue && value == string(shift.Epic),
+				//Emoji: &discordgo.ComponentEmoji{
+				//	Name: ,
+				//},
+				CustomID: SetPlatformPrefix + string(shift.Epic),
+			},
+			discordgo.Button{
+				Label:    "Xbox",
+				Style:    discordgo.PrimaryButton,
+				Disabled: hasValue && value == string(shift.XboxLive),
+				//Emoji: &discordgo.ComponentEmoji{
+				//	Name: ,
+				//},
+				CustomID: SetPlatformPrefix + string(shift.XboxLive),
+			},
+			discordgo.Button{
+				Label:    "Playstation",
+				Style:    discordgo.PrimaryButton,
+				Disabled: hasValue && value == string(shift.PSN),
+				//Emoji: &discordgo.ComponentEmoji{
+				//	Name: ,
+				//},
+				CustomID: SetPlatformPrefix + string(shift.PSN),
+			},
 		},
-		discordgo.Button{
-			Label: "Epic",
-			Style: discordgo.PrimaryButton,
-			//Emoji: &discordgo.ComponentEmoji{
-			//	Name: ,
-			//},
-			CustomID: SetPlatformPrefix + string(shift.Epic),
-		},
-		discordgo.Button{
-			Label: "Xbox",
-			Style: discordgo.PrimaryButton,
-			//Emoji: &discordgo.ComponentEmoji{
-			//	Name: ,
-			//},
-			CustomID: SetPlatformPrefix + string(shift.XboxLive),
-		},
-		discordgo.Button{
-			Label: "Playstation",
-			Style: discordgo.PrimaryButton,
-			//Emoji: &discordgo.ComponentEmoji{
-			//	Name: ,
-			//},
-			CustomID: SetPlatformPrefix + string(shift.PSN),
-		},
-	},
+	}
 }
 
-var zero = 0
-
-var DMComponents = discordgo.ActionsRow{
-	Components: []discordgo.MessageComponent{
-		discordgo.SelectMenu{
-			CustomID:    SetDMPrefix,
-			Placeholder: "Choose one...",
-			MinValues:   &zero,
-			MaxValues:   1,
-			Options: []discordgo.SelectMenuOption{
-				{
-					Label: "No, don't DM me",
-					Value: "false",
-					Emoji: &discordgo.ComponentEmoji{
-						Name: "❌",
+// return different components if we have existing settings (and therefore should display a placeholder/set value),
+// or not if the component is
+func getDMComponents(hasValue, value bool) discordgo.ActionsRow {
+	var minVal = 0
+	// if the value is set already, then 1 element must always be selected in the dropdown
+	if hasValue {
+		minVal = 1
+	}
+	return discordgo.ActionsRow{
+		Components: []discordgo.MessageComponent{
+			discordgo.SelectMenu{
+				CustomID:    SetDMPrefix,
+				Placeholder: "Choose one...",
+				MinValues:   &minVal,
+				MaxValues:   1,
+				Options: []discordgo.SelectMenuOption{
+					{
+						Label: "No, don't DM me",
+						Value: "false",
+						Emoji: &discordgo.ComponentEmoji{
+							Name: "❌",
+						},
+						Default: hasValue && !value,
 					},
-				},
-				{
-					Label: "Yes, please DM me",
-					Value: "true",
-					Emoji: &discordgo.ComponentEmoji{
-						Name: "✅",
+					{
+						Label: "Yes, please DM me",
+						Value: "true",
+						Emoji: &discordgo.ComponentEmoji{
+							Name: "✅",
+						},
+						Default: hasValue && value,
 					},
 				},
 			},
 		},
-	},
+	}
 }

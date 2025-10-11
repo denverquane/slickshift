@@ -6,6 +6,7 @@ require (
 	github.com/PuerkitoBio/goquery v1.10.3
 	github.com/bwmarrin/discordgo v0.29.0
 	github.com/gin-gonic/gin v1.11.0
+	github.com/go-playground/assert/v2 v2.2.0
 	modernc.org/sqlite v1.39.0
 )
 

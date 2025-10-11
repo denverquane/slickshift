@@ -2,9 +2,8 @@ package bot
 
 import (
 	"fmt"
-	"github.com/denverquane/slickshift/shift"
-	"github.com/denverquane/slickshift/store"
 	"sort"
+	"strings"
 
 	"github.com/bwmarrin/discordgo"
 )
@@ -17,35 +16,44 @@ func percentFormatted(num, denom int64) string {
 	return fmt.Sprintf(" (%.0f%%)", v)
 }
 
-func sortedUserEmbeds(stats store.Statistics) []*discordgo.MessageEmbedField {
-	type kv struct {
-		Key   shift.Platform
-		Value int64
-	}
+type kv struct {
+	Key   string
+	Value int64
+}
 
+func sortMap(m map[string]int64) []kv {
 	var ss []kv
-	for k, v := range stats.Users {
-		if k != shift.Total {
-			ss = append(ss, kv{k, v})
-		}
+	for k, v := range m {
+		ss = append(ss, kv{k, v})
 	}
-
 	sort.Slice(ss, func(i, j int) bool {
 		return ss[i].Value > ss[j].Value
 	})
+	return ss
+}
 
-	total := stats.Users[shift.Total]
-	embeds := make([]*discordgo.MessageEmbedField, len(ss)+1)
+func toSortedEmbeds(m map[string]int64) []*discordgo.MessageEmbedField {
+	sortedUsers := sortMap(m)
+
+	embeds := make([]*discordgo.MessageEmbedField, len(sortedUsers))
+
+	total := m["total"]
 	embeds[0] = &discordgo.MessageEmbedField{
 		Name:   "Total",
 		Value:  fmt.Sprintf("%d", total),
 		Inline: false,
 	}
-	for i, elem := range ss {
-		embeds[i+1] = &discordgo.MessageEmbedField{
-			Name:   shift.ToPretty(elem.Key),
-			Value:  fmt.Sprintf("%d%s", elem.Value, percentFormatted(elem.Value, total)),
-			Inline: true,
+
+	i := 1
+	for _, elem := range sortedUsers {
+		if elem.Key != "total" {
+			name := strings.Title(strings.ReplaceAll(elem.Key, "_", " "))
+			embeds[i] = &discordgo.MessageEmbedField{
+				Name:   name,
+				Value:  fmt.Sprintf("%d%s", elem.Value, percentFormatted(elem.Value, total)),
+				Inline: true,
+			}
+			i++
 		}
 	}
 	return embeds
@@ -59,45 +67,37 @@ func (bot *Bot) infoResponse(userID string, s *discordgo.Session, i *discordgo.I
 	embeds := []*discordgo.MessageEmbed{
 		&discordgo.MessageEmbed{
 			Title:  "Users",
-			Fields: sortedUserEmbeds(stats),
+			Fields: toSortedEmbeds(stats.Users),
 		},
 		&discordgo.MessageEmbed{
-			Title: "Codes",
+			Title:  "Codes",
+			Fields: toSortedEmbeds(stats.Codes),
+			Color:  Yellow,
+		},
+		&discordgo.MessageEmbed{
+			Title:  "Redemptions",
+			Fields: toSortedEmbeds(stats.Redemptions),
+			Color:  Green,
+		},
+		&discordgo.MessageEmbed{
+			Title: "Slickshift",
 			Fields: []*discordgo.MessageEmbedField{
 				&discordgo.MessageEmbedField{
-					Name:   "Total",
-					Value:  fmt.Sprintf("%d", stats.Codes),
-					Inline: true,
+					Name:  "Official Server",
+					Value: "[Join Server](" + ServerLink + ")",
 				},
-			},
-			Color: Yellow,
-		},
-		&discordgo.MessageEmbed{
-			Title: "Redemptions",
-			Fields: []*discordgo.MessageEmbedField{
 				&discordgo.MessageEmbedField{
-					Name:   "Total",
-					Value:  fmt.Sprintf("%d", stats.Redemptions),
+					Name:   "Invite Bot",
+					Value:  "[Invite Bot](" + BotInviteLink + ")",
 					Inline: false,
 				},
-				&discordgo.MessageEmbedField{
-					Name:   "Successful",
-					Value:  fmt.Sprintf("%d %s", stats.SuccessRedemptions, percentFormatted(stats.SuccessRedemptions, stats.Redemptions)),
-					Inline: true,
-				},
-			},
-			Color: Green,
-		},
-		&discordgo.MessageEmbed{
-			Title: "Project",
-			Fields: []*discordgo.MessageEmbedField{
 				&discordgo.MessageEmbedField{
 					Name:  "Repository",
 					Value: GithubLink,
 				},
 			},
 			Footer: &discordgo.MessageEmbedFooter{
-				Text: bot.version + "-" + bot.commit,
+				Text: "v" + bot.version + "-" + bot.commit,
 			},
 		},
 	}
