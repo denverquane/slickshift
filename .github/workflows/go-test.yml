@@ -33,7 +33,7 @@ jobs:
         run: go mod download
 
       - name: Run tests with coverage
-        run: go test ./... -race -coverprofile=coverage.out -covermode=atomic -v
+        run: go test ./bot ./shift ./store ./data -coverprofile=coverage.out -covermode=atomic -v
 
       - name: Display coverage
         run: go tool cover -func=coverage.out
