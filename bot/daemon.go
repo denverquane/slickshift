@@ -18,6 +18,7 @@ func (bot *Bot) StartUserRedemptionProcessing(interval time.Duration, stop <-cha
 			slog.Info("User code redemption processing stopped")
 			return
 
+			// TODO add debouncing so we don't constantly trigger reprocessing if multiple codes come through close together
 		case userID := <-bot.redemptionTrigger:
 			// if we aren't triggering the code redemption processing for a specific user, then reset the top
 			// control flow's interval so we don't run it back-to-back for all users

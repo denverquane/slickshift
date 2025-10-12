@@ -1,4 +1,13 @@
 <p align="center">
+    <a href="https://hub.docker.com/repository/docker/denverquane/slickshift" alt="Pulls">
+        <img src="https://img.shields.io/docker/pulls/denverquane/slickshift.svg" />
+    </a>
+    <a href="https://goreportcard.com/report/github.com/denverquane/slickshift" alt="Report Card">
+        <img src="https://goreportcard.com/badge/github.com/denverquane/slickshift" />
+    </a>
+</p>
+
+<p align="center">
     <a href="https://discord.com/oauth2/authorize?client_id=1420238749270544547&permissions=0&integration_type=0&scope=bot" alt="invite">
         <img alt="Invite Link" src="https://img.shields.io/static/v1?label=bot&message=invite%20me&color=purple">
     </a>
@@ -16,6 +25,13 @@ It uses simple HTTP requests to authenticate with [SHiFT Rewards](https://shift.
 User cookies are encrypted in a sqlite database, and SHiFT codes can be provided at whim using the API server on port `8080`, or via the Discord Slash Command `/add`.
 
 *SlickShift is not affiliated with, endorsed by, or approved by Gearbox Software, 2K Games, or the SHiFT service in any way.* To see more details, see [LIABILITY.md](./LIABILITY.md)
+
+### Installation
+
+Install Go 1.25+, then run `go build -o bot-exec cmd/server.go`. Then run the output `bot-exec` 
+executable with the [Environment Variables](#environment-variables) specified below
+
+*TODO: Add Github workflow to generate executables automatically*
 
 ### Docker
 

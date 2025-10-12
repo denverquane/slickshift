@@ -19,7 +19,7 @@ const (
 	SecurityLink      = GithubLink + "/blob/main/SECURITY.md"
 	LiabilityLink     = GithubLink + "/blob/main/LIABILITY.md"
 	ServerLink        = "https://discord.gg/GDSsKcrPxp"
-	BotInviteLink     = "https://discord.com/oauth2/authorize?client_id=1420238749270544547&permissions=0&integration_type=0&scope=bot"
+	BotInviteLink     = "https://discord.com/oauth2/authorize?client_id=1420238749270544547"
 	ThumbsUp          = "👍"
 	X                 = "❌"
 	Lock              = "🔒"
@@ -49,7 +49,7 @@ func CreateNewBot(token string, storage store.Store, version, commit string) (*B
 	return &Bot{
 		session:           discord,
 		storage:           storage,
-		redemptionTrigger: make(chan string),
+		redemptionTrigger: make(chan string, 10),
 		version:           version,
 		commit:            commit,
 	}, nil
