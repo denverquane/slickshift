@@ -216,7 +216,7 @@ func (s *Sqlite) GetValidCodesNotRedeemedForUser(userID, platform string) ([]str
 	// TODO maybe have a minimum threshold on how many expiries have to be marked before we ignore?
 	query := "SELECT sc.code FROM shift_codes sc WHERE " +
 		"NOT EXISTS (SELECT 1 FROM redemptions r WHERE r.code = sc.code AND r.user_id = ? AND r.platform = ?) AND " +
-		"NOT EXISTS (SELECT 1 FROM redemptions r WHERE r.code = sc.code AND (r.status = ? OR r.status = ?))" +
+		"NOT EXISTS (SELECT 1 FROM redemptions r WHERE r.code = sc.code AND (r.status = ? OR r.status = ?)) " +
 		"ORDER BY success_unix DESC" // sort preferentially for the most recently-successful codes
 	rows, err := s.db.Query(query, userID, platform, shift.EXPIRED, shift.NOT_EXIST)
 	if err != nil {

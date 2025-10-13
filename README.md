@@ -41,11 +41,11 @@ See [Environment Variables](#environment-variables) for required runtime informa
 
 ### Environment Variables
 
-| Variable             | Required | Default | Description                                                                                                                                         |
-|----------------------| -------- |--------|-----------------------------------------------------------------------------------------------------------------------------------------------------|
-| `ENCRYPTION_KEY_B64` | ✅ Yes    | *None* | Base64-encoded 32-byte secret key used to encrypt user data. The program will exit if this is not set or invalid. Generate this with `openssl rand -base64 32`              |
-| `DISCORD_BOT_TOKEN`  | ✅ Yes    | *None* | Discord bot token used to authenticate with the Discord API. The program will exit if this is not set.                                              |
-| `DISCORD_GUILD_ID`   | ❌ No    | *None* | The ID of the Discord guild (server) where the bot will operate. If not set, slash commands will be registered globally (not recommended for development). |
-| `REDEEM_INTERVAL`    | ❌ No     | `5` (minutes) | Interval (in minutes) between redemption attempts. Must be ≥ 1.                                                                                     |
-| `DATABASE_FILE_PATH` | ❌ No     | `./sqlite.db` | Path to the SQLite database file. If not set, it defaults to a local file.                                                                          |
-| `API_SERVER_PORT`    | ❌ No     | `8080` | Port that the API server will be accessible on.                                                                                                     |
+| Variable             | Required | Default       | Description                                                                                                                                                                  |
+|----------------------| -------- |---------------|------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `ENCRYPTION_KEY_B64` | ✅ Yes    | *None*        | Base64-encoded 32-byte secret key used to encrypt user data. The program will exit if this is not set or invalid. Generate this with `openssl rand -base64 32`               |
+| `DISCORD_BOT_TOKEN`  | ✅ Yes    | *None*        | Discord bot token used to authenticate with the Discord API. The program will exit if this is not set.                                                                       |
+| `DISCORD_GUILD_ID`   | ❌ No    | *None*        | The ID of the Discord guild (server) where the bot will operate. If not set, slash commands will be registered globally (not recommended for development).                   |
+| `REDEEM_INTERVAL`    | ❌ No     | `30` (minutes) | Interval (in minutes) between redemption attempts. Must be ≥ 1. (Adding codes or registering new users will always trigger the redemption loop, so this can be a high value) |
+| `DATABASE_FILE_PATH` | ❌ No     | `./sqlite.db` | Path to the SQLite database file. If not set, it defaults to a local file.                                                                                                   |
+| `API_SERVER_PORT`    | ❌ No     | `8080`        | Port that the API server will be accessible on.                                                                                                                              |

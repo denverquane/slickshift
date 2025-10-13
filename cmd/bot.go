@@ -41,7 +41,7 @@ func main() {
 	}
 
 	if redeemInterval == "" {
-		redeemInterval = "5"
+		redeemInterval = "30"
 		slog.Info("No REDEEM_INTERVAL set, defaulting to " + redeemInterval + " (minutes)")
 	}
 	redeemIntervalInt, err := strconv.Atoi(redeemInterval)
