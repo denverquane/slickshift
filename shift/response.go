@@ -7,6 +7,7 @@ const (
 	AlreadyRedeemed
 	Invalid
 	Expired
+	Link2KAccount
 	Unrecognized
 )
 
@@ -15,6 +16,7 @@ const (
 	NOT_EXIST        = "This SHiFT code does not exist"
 	EXPIRED          = "This SHiFT code has expired"
 	SUCCESS          = "Your code was successfully redeemed"
+	LINK2K           = "To redeem this SHiFT code, please link your 2K account."
 )
 
 func DetermineResponseType(input string) ResponseType {
@@ -27,6 +29,8 @@ func DetermineResponseType(input string) ResponseType {
 		return Expired
 	case NOT_EXIST:
 		return Invalid
+	case LINK2K:
+		return Link2KAccount
 	default:
 		return Unrecognized
 	}

@@ -35,16 +35,30 @@ func main() {
 		log.Fatal(err)
 	}
 
-	//cookies := c.DumpCookies()
-	//if len(cookies) == 0 {
-	//	log.Fatal("No cookies returned")
-	//}
-	//
-	//// remake the client so we can verify that simply copying over the cookies will suffice
-	//c, err = shift.NewClient(cookies)
-	//if err != nil {
-	//	log.Fatal(err)
-	//}
+	cookies := c.DumpCookies()
+	if len(cookies) == 0 {
+		log.Fatal("No cookies returned")
+	}
+
+	// remake the client so we can verify that simply copying over the cookies will suffice
+	c, err = shift.NewClient(cookies)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	codes := data.DefaultBL4Codes()
+	for code := range codes {
+		status, err := c.RedeemCode(code, shift.Steam)
+		if err != nil {
+			log.Println("Couldn't redeem code with error:", err)
+		}
+		statusCode := shift.DetermineResponseType(status)
+		if statusCode == shift.Success {
+			log.Printf("Redeemed %s successfully\n", code)
+		} else {
+			log.Printf("Redeemed %s failed with status: \"%s\"\n", code, status)
+		}
+	}
 
 	//rewards, err := c.CheckRewards(shift.Steam, shift.Borderlands4)
 	//if err != nil {

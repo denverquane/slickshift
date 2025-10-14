@@ -87,11 +87,6 @@ func (bot *Bot) infoResponse(userID string, s *discordgo.Session, i *discordgo.I
 					Value: "[Join Server](" + ServerLink + ")",
 				},
 				&discordgo.MessageEmbedField{
-					Name:   "Invite Bot",
-					Value:  "[Invite Bot](" + BotInviteLink + ")",
-					Inline: false,
-				},
-				&discordgo.MessageEmbedField{
 					Name:  "Repository",
 					Value: GithubLink,
 				},
