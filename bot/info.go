@@ -68,11 +68,12 @@ func (bot *Bot) infoResponse(userID string, s *discordgo.Session, i *discordgo.I
 		&discordgo.MessageEmbed{
 			Title:  "Users",
 			Fields: toSortedEmbeds(stats.Users),
+			Color:  Blue,
 		},
 		&discordgo.MessageEmbed{
 			Title:  "Codes",
 			Fields: toSortedEmbeds(stats.Codes),
-			Color:  Yellow,
+			Color:  Orange,
 		},
 		&discordgo.MessageEmbed{
 			Title:  "Redemptions",
@@ -91,6 +92,7 @@ func (bot *Bot) infoResponse(userID string, s *discordgo.Session, i *discordgo.I
 					Value: GithubLink,
 				},
 			},
+			Color: Grey,
 			Footer: &discordgo.MessageEmbedFooter{
 				Text: "v" + bot.version + "-" + bot.commit,
 			},

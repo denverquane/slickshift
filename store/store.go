@@ -11,12 +11,12 @@ type UserCookies struct {
 }
 
 type Redemption struct {
-	Code     string
-	Platform string
-	Status   string
-	TimeUnix int64
-	Game     string
-	Reward   sql.NullString
+	Code     string         `json:"code"`
+	Platform string         `json:"platform"`
+	Status   string         `json:"status"`
+	TimeUnix int64          `json:"time_unix"`
+	Game     string         `json:"game"`
+	Reward   sql.NullString `json:"reward"`
 }
 
 type Statistics struct {
@@ -43,10 +43,15 @@ type Store interface {
 	CodeExists(code string) bool
 	AddCode(code, game string, userID *string, source *string) error
 	SetCodeRewardAndSuccess(code, reward string, success bool) (bool, error)
-	GetValidCodesNotRedeemedForUser(userID, platform string) ([]string, error)
+	GetValidCodesNotRedeemedForUser(userID, platform string, limit int) ([]string, error)
 
 	GetRecentRedemptionsForUser(userID, status string, quantity int) ([]Redemption, error)
+	RedemptionSummaryForUser(userID string) (map[string]int64, error)
 	AddRedemption(userID, code, platform string, status string) error
+
+	AddShiftError(userID, code, platform, error string) error
+	GetShiftErrors(userID string) ([]string, error)
+	ClearShiftErrors(userID string) error
 
 	GetStatistics(userID string) (Statistics, error)
 

@@ -111,7 +111,7 @@ func (s *Sqlite) GetUserPlatformAndDM(userID string) (string, bool, error) {
 	if !platform.Valid {
 		return "", dm.Valid && dm.Bool, nil
 	}
-	return platform.String, dm.Valid, nil
+	return platform.String, dm.Valid && dm.Bool, nil
 }
 
 func (s *Sqlite) SetUserDM(userID string, dm bool) error {
@@ -209,7 +209,7 @@ func (s *Sqlite) SetCodeRewardAndSuccess(code, reward string, success bool) (boo
 	return n == 1, tx.Commit()
 }
 
-func (s *Sqlite) GetValidCodesNotRedeemedForUser(userID, platform string) ([]string, error) {
+func (s *Sqlite) GetValidCodesNotRedeemedForUser(userID, platform string, limit int) ([]string, error) {
 	// grab codes that the user hasn't redeemed for the platform before,
 	// AND, if the code hasn't been marked as expired/invalid before
 
@@ -217,8 +217,8 @@ func (s *Sqlite) GetValidCodesNotRedeemedForUser(userID, platform string) ([]str
 	query := "SELECT sc.code FROM shift_codes sc WHERE " +
 		"NOT EXISTS (SELECT 1 FROM redemptions r WHERE r.code = sc.code AND r.user_id = ? AND r.platform = ?) AND " +
 		"NOT EXISTS (SELECT 1 FROM redemptions r WHERE r.code = sc.code AND (r.status = ? OR r.status = ?)) " +
-		"ORDER BY success_unix DESC" // sort preferentially for the most recently-successful codes
-	rows, err := s.db.Query(query, userID, platform, shift.EXPIRED, shift.NOT_EXIST)
+		"ORDER BY success_unix DESC LIMIT ?" // sort preferentially for the most recently-successful codes
+	rows, err := s.db.Query(query, userID, platform, shift.EXPIRED, shift.NOT_EXIST, limit)
 	if err != nil {
 		return nil, err
 	}
@@ -301,6 +301,32 @@ func scanRedemptions(rows *sql.Rows) ([]Redemption, error) {
 	return redemptions, nil
 }
 
+func (s *Sqlite) RedemptionSummaryForUser(userID string) (map[string]int64, error) {
+	var total, success, already int64
+	err := s.db.QueryRow(`
+    SELECT 
+        (SELECT COUNT(*) FROM redemptions WHERE user_id = ?),
+        (SELECT COUNT(*) FROM redemptions WHERE user_id = ? AND status = ?),
+        (SELECT COUNT(*) FROM redemptions WHERE user_id = ? AND status = ?)
+`,
+		userID,
+		userID, shift.SUCCESS,
+		userID, shift.ALREADY_REDEEMED,
+	).Scan(
+		&total,
+		&already,
+		&success,
+	)
+	if err != nil {
+		return nil, err
+	}
+	return map[string]int64{
+		"total":            total,
+		"success":          success,
+		"already_redeemed": already,
+	}, nil
+}
+
 func (s *Sqlite) AddRedemption(userID, code, platform string, status string) error {
 	t := time.Now().Unix()
 	tx, err := s.db.BeginTx(context.Background(), nil)
@@ -318,6 +344,35 @@ func (s *Sqlite) AddRedemption(userID, code, platform string, status string) err
 		return err
 	}
 	return tx.Commit()
+}
+
+func (s *Sqlite) AddShiftError(userID, code, platform, error string) error {
+	t := time.Now().Unix()
+	_, err := s.db.Exec("INSERT INTO shift_errors (user_id, code, platform, error, created_unix) VALUES (?, ?, ?, ?, ?)",
+		userID, code, platform, error, t)
+	return err
+}
+
+func (s *Sqlite) GetShiftErrors(userID string) ([]string, error) {
+	rows, err := s.db.Query("SELECT error from shift_errors WHERE user_id = ? ORDER BY created_unix DESC", userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var errors []string
+	for rows.Next() {
+		var e string
+		if err := rows.Scan(&e); err != nil {
+			return nil, err
+		}
+		errors = append(errors, e)
+	}
+	return errors, nil
+}
+
+func (s *Sqlite) ClearShiftErrors(userID string) error {
+	_, err := s.db.Exec("DELETE FROM shift_errors WHERE user_id = ?", userID)
+	return err
 }
 
 func (s *Sqlite) GetStatistics(userID string) (Statistics, error) {

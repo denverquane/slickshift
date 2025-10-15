@@ -26,12 +26,6 @@ const (
 	Cheer             = "🎉"
 )
 
-const (
-	Red    = 15548997
-	Green  = 5763719
-	Yellow = 16705372
-)
-
 type Bot struct {
 	session           *discordgo.Session
 	storage           store.Store
@@ -116,6 +110,8 @@ func (bot *Bot) getSlashResponse(userID string, s *discordgo.Session, i *discord
 			return bot.addResponse(userID, s, i)
 		case INFO:
 			return bot.infoResponse(userID, s, i)
+		case REDEMPTIONS:
+			return bot.redemptionsResponse(userID, s, i)
 		}
 	} else if i.Type == discordgo.InteractionMessageComponent {
 		exists := bot.storage.UserExists(userID)

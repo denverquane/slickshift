@@ -74,6 +74,50 @@ func TestSqliteStore_SetUserPlatform(t *testing.T) {
 	}
 }
 
+func TestSqliteStore_GetUserPlatformAndDM(t *testing.T) {
+	st := newTestDB(t)
+	const userID = "123"
+	const platform = string(shift.Steam)
+
+	st.AddUser(userID)
+
+	p, dm, err := st.GetUserPlatformAndDM(userID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if p != "" {
+		t.Fatal("User platform should be empty")
+	}
+	if dm {
+		t.Fatal("DM should be false")
+	}
+	st.SetUserPlatform(userID, platform)
+
+	p, dm, err = st.GetUserPlatformAndDM(userID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if p != platform {
+		t.Fatal("User platform should be " + platform)
+	}
+	if dm {
+		t.Fatal("DM should be false")
+	}
+
+	st.SetUserDM(userID, true)
+	p, dm, err = st.GetUserPlatformAndDM(userID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if p != platform {
+		t.Fatal("User platform should be " + platform)
+	}
+	if !dm {
+		t.Fatal("DM should be true")
+	}
+
+}
+
 func TestSqliteStore_AddCode(t *testing.T) {
 	st := newTestDB(t)
 	const code = "AAAAA"
@@ -176,7 +220,7 @@ func TestSqliteStore_GetValidCodes(t *testing.T) {
 	st.AddRedemption(userID, notExistCode, platform, shift.NOT_EXIST)
 
 	// act
-	codes, err := st.GetValidCodesNotRedeemedForUser(testUserID, platform)
+	codes, err := st.GetValidCodesNotRedeemedForUser(testUserID, platform, 10)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -187,5 +231,71 @@ func TestSqliteStore_GetValidCodes(t *testing.T) {
 	}
 	if codes[0] != goodCode {
 		t.Fatal("Expected good code, got ", codes[0])
+	}
+}
+
+func TestSqliteStore_AddError(t *testing.T) {
+	st := newTestDB(t)
+	const userID = "123"
+	const code = "XXXXX"
+	const game = string(shift.Borderlands4)
+	const platform = string(shift.Steam)
+	const errText = "234"
+
+	st.AddUser(userID)
+	st.AddCode(code, game, nil, nil)
+
+	err := st.AddShiftError(userID, code, platform, errText)
+	if err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestSqlite_GetShiftError(t *testing.T) {
+	st := newTestDB(t)
+	const userID = "123"
+	const code = "XXXXX"
+	const game = string(shift.Borderlands4)
+	const platform = string(shift.Steam)
+	const errText = "234"
+
+	st.AddUser(userID)
+	st.AddCode(code, game, nil, nil)
+	st.AddShiftError(userID, code, platform, errText)
+
+	errs, err := st.GetShiftErrors(userID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(errs) != 1 {
+		t.Fatal("Expected 1 code, got ", len(errs))
+	}
+	if errs[0] != errText {
+		t.Fatal("Expected err text, got ", errs[0])
+	}
+}
+
+func TestSqliteStore_ClearShiftErrors(t *testing.T) {
+	st := newTestDB(t)
+	const userID = "123"
+	const code = "XXXXX"
+	const game = string(shift.Borderlands4)
+	const platform = string(shift.Steam)
+	const errText = "234"
+
+	st.AddUser(userID)
+	st.AddCode(code, game, nil, nil)
+	st.AddShiftError(userID, code, platform, errText)
+
+	err := st.ClearShiftErrors(userID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	errs, err := st.GetShiftErrors(userID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(errs) != 0 {
+		t.Fatal("Expected 0 code, got ", len(errs))
 	}
 }

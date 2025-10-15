@@ -13,7 +13,10 @@ const (
 	LOGOUT         = "logout"
 	ADD            = "add"
 	INFO           = "info"
+	REDEMPTIONS    = "redemptions"
 )
+
+var one = float64(1)
 
 var AllCommands = []*discordgo.ApplicationCommand{
 	{
@@ -75,6 +78,20 @@ var AllCommands = []*discordgo.ApplicationCommand{
 	{
 		Name:        INFO,
 		Description: "View SlickShift stats and info",
+	},
+	{
+		Name:        REDEMPTIONS,
+		Description: "View recent code redemptions SlickShift performed for you",
+		Options: []*discordgo.ApplicationCommandOption{
+			{
+				Type:        discordgo.ApplicationCommandOptionInteger,
+				Name:        "quantity",
+				Description: "Number of redemptions to show. Defaults to 3",
+				Required:    false,
+				MinValue:    &one,
+				MaxValue:    10,
+			},
+		},
 	},
 }
 

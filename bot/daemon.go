@@ -71,7 +71,26 @@ func (bot *Bot) userRedemptionLoop(userID string) {
 			slog.Debug("Skipping user with no platform set", "user_id", user.UserID)
 			continue
 		}
-		codes, err := bot.storage.GetValidCodesNotRedeemedForUser(user.UserID, platform)
+		errors, err := bot.storage.GetShiftErrors(user.UserID)
+		if err != nil {
+			slog.Error("Error getting shift errors", "user_id", user.UserID, "error", err.Error())
+			continue
+		}
+		if len(errors) > 4 {
+			if dm {
+				str := "It seems like the last 5 code attempts I tried for you returned errors...\n" +
+					"Your user credentials might be expired.\n\n" +
+					"Maybe try logging in again with `/login`, but if this continues, please reach out on the [Official Discord Server](" + ServerLink + ")"
+				err = bot.DMUser(user.UserID, str)
+				if err != nil {
+					slog.Error("Failed to DM user", "user_id", user.UserID, "error", err.Error())
+				} else {
+					slog.Info("DMed user for >4 sequential shift errors", "user_id", user.UserID)
+				}
+			}
+			continue
+		}
+		codes, err := bot.storage.GetValidCodesNotRedeemedForUser(user.UserID, platform, 10)
 		if err != nil {
 			slog.Error("Error getting codes", "error", err.Error())
 			continue
@@ -89,12 +108,24 @@ func (bot *Bot) userRedemptionLoop(userID string) {
 			success := status == shift.SUCCESS
 			if err != nil {
 				slog.Error("Error redeeming code", "user_id", user.UserID, "code", code, "platform", platform, "error", err.Error())
-			} else if reward != nil {
-				set, err := bot.storage.SetCodeRewardAndSuccess(code, reward.Title, success)
+				err2 := bot.storage.AddShiftError(user.UserID, code, platform, err.Error())
+				if err2 != nil {
+					slog.Error("Error adding shift error to db", "user_id", user.UserID, "code", code, "platform", platform, "error", err2.Error())
+				}
+			} else {
+				// if no error was reported, then clear errors for this user
+				// (for now, we treat them as only important if they're sequential)
+				err = bot.storage.ClearShiftErrors(user.UserID)
 				if err != nil {
-					slog.Error("Error setting code reward", "code", code, "reward", reward.Title, "error", err.Error())
-				} else if set {
-					slog.Info("Set reward", "code", code, "reward", reward.Title)
+					slog.Error("Error clearing shift errors from db", "user_id", user.UserID, "error", err.Error())
+				}
+				if reward != nil {
+					set, err := bot.storage.SetCodeRewardAndSuccess(code, reward.Title, success)
+					if err != nil {
+						slog.Error("Error setting code reward", "code", code, "reward", reward.Title, "error", err.Error())
+					} else if set {
+						slog.Info("Set reward", "code", code, "reward", reward.Title)
+					}
 				}
 			}
 			if success && dm {
@@ -106,7 +137,7 @@ func (bot *Bot) userRedemptionLoop(userID string) {
 				if err != nil {
 					slog.Error("Error DMing user", "user_id", user.UserID, "error", err.Error())
 				} else {
-					slog.Debug("DMed user", "user_id", user.UserID)
+					slog.Info("DMed user", "user_id", user.UserID)
 				}
 			}
 		}
