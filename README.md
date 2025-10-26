@@ -28,6 +28,10 @@ User cookies are encrypted in a sqlite database, and SHiFT codes can be provided
 
 ### Installation
 
+If you're just looking to use the Bot functionality, the easiest method is to [join the official SlickShift discord server](https://discord.gg/GDSsKcrPxp), and invoke the bot commands in there.
+
+But if you're looking to run/install the bot locally:
+
 Install Go 1.25+, then run `go build -o bot-exec cmd/server.go`. Then run the output `bot-exec` 
 executable with the [Environment Variables](#environment-variables) specified below
 
