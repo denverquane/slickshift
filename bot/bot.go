@@ -95,6 +95,7 @@ func (bot *Bot) handleSlashCommand(s *discordgo.Session, i *discordgo.Interactio
 
 func (bot *Bot) getSlashResponse(userID string, s *discordgo.Session, i *discordgo.InteractionCreate) *discordgo.InteractionResponse {
 	if i.Type == discordgo.InteractionApplicationCommand {
+		slog.Info("Command invoked", "user_id", userID, "command", i.ApplicationCommandData().Name)
 		switch i.ApplicationCommandData().Name {
 		case HELP:
 			return bot.helpResponse(s, i)

@@ -89,7 +89,7 @@ var AllCommands = []*discordgo.ApplicationCommand{
 				Description: "Number of redemptions to show. Defaults to 3",
 				Required:    false,
 				MinValue:    &one,
-				MaxValue:    10,
+				MaxValue:    9,
 			},
 		},
 	},

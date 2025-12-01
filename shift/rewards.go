@@ -1,6 +1,9 @@
 package shift
 
-const GoldenKey = "Golden Key for Borderlands 4"
+const (
+	VaultHunterSkinSuffix = "% Vault Hunter Skin"
+	GoldenKey             = "Golden Key for Borderlands 4"
+)
 
 type Reward struct {
 	Title       string

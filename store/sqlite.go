@@ -379,7 +379,7 @@ func (s *Sqlite) GetStatistics(userID string) (Statistics, error) {
 	var stats Statistics
 	var totalUsers, steam, epic, xbox, psn int64
 	var totalRedeem, expired, already, success int64
-	var totalCodes, goldenKey, other, unknown int64
+	var totalCodes, goldenKey, vhSkin, other, unknown int64
 	err := s.db.QueryRow(`
     SELECT 
         (SELECT COUNT(*) FROM users),
@@ -389,7 +389,8 @@ func (s *Sqlite) GetStatistics(userID string) (Statistics, error) {
         (SELECT COUNT(*) FROM users WHERE platform = ?),
         (SELECT COUNT(*) FROM shift_codes),
         (SELECT COUNT(*) FROM shift_codes WHERE reward = ?),
-        (SELECT COUNT(*) FROM shift_codes WHERE reward IS NOT NULL AND reward != ?),
+        (SELECT COUNT(*) FROM shift_codes WHERE reward LIKE ?),
+        (SELECT COUNT(*) FROM shift_codes WHERE reward IS NOT NULL AND reward NOT LIKE ? AND reward != ?),
         (SELECT COUNT(*) FROM shift_codes WHERE reward IS NULL),
         (SELECT COUNT(*) FROM redemptions),
         (SELECT COUNT(*) FROM redemptions WHERE status = ?),
@@ -399,7 +400,8 @@ func (s *Sqlite) GetStatistics(userID string) (Statistics, error) {
 		shift.Steam, shift.Epic, shift.XboxLive, shift.PSN,
 
 		shift.GoldenKey,
-		shift.GoldenKey,
+		shift.VaultHunterSkinSuffix,
+		shift.VaultHunterSkinSuffix, shift.GoldenKey,
 
 		shift.EXPIRED,
 		shift.ALREADY_REDEEMED,
@@ -413,6 +415,7 @@ func (s *Sqlite) GetStatistics(userID string) (Statistics, error) {
 
 		&totalCodes,
 		&goldenKey,
+		&vhSkin,
 		&other,
 		&unknown,
 
@@ -432,10 +435,11 @@ func (s *Sqlite) GetStatistics(userID string) (Statistics, error) {
 		"psn":   psn,
 	}
 	stats.Codes = map[string]int64{
-		"total":      totalCodes,
-		"golden_key": goldenKey,
-		"other":      other,
-		"unknown":    unknown,
+		"total":             totalCodes,
+		"golden_key":        goldenKey,
+		"vault_hunter_skin": vhSkin,
+		"other":             other,
+		"unknown":           unknown,
 	}
 	stats.Redemptions = map[string]int64{
 		"total":            totalRedeem,

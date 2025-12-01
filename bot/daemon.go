@@ -79,7 +79,7 @@ func (bot *Bot) userRedemptionLoop(userID string) {
 		if len(errors) > 4 {
 			if dm {
 				str := "It seems like the last 5 code attempts I tried for you returned errors...\n" +
-					"Your user credentials might be expired.\n\n" +
+					"Your user credentials might be expired?\n\n" +
 					"Maybe try logging in again with `/login`, but if this continues, please reach out on the [Official Discord Server](" + ServerLink + ")"
 				err = bot.DMUser(user.UserID, str)
 				if err != nil {

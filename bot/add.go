@@ -1,10 +1,11 @@
 package bot
 
 import (
+	"log"
+
 	"github.com/bwmarrin/discordgo"
 	"github.com/denverquane/slickshift/shift"
 	"github.com/denverquane/slickshift/store"
-	"log"
 )
 
 func (bot *Bot) addResponse(userID string, s *discordgo.Session, i *discordgo.InteractionCreate) *discordgo.InteractionResponse {
@@ -23,7 +24,8 @@ func (bot *Bot) addResponse(userID string, s *discordgo.Session, i *discordgo.In
 		log.Println(err)
 		return nil
 	}
-	// trigger reprocessing because a new code was added
+	// trigger reprocessing for this user first, then trigger for other users as well
+	bot.triggerRedemptionProcessing(userID)
 	bot.triggerRedemptionProcessing("")
 
 	return privateMessageResponse("Nice, thanks for adding the code! It should be tested and validated soon!")
