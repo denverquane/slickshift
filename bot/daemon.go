@@ -2,6 +2,7 @@ package bot
 
 import (
 	"log/slog"
+	"runtime/debug"
 	"time"
 
 	"github.com/denverquane/slickshift/shift"
@@ -62,90 +63,108 @@ func (bot *Bot) userRedemptionLoop(userID string) {
 	}
 
 	for _, user := range userCookies {
-		platform, dm, err := bot.storage.GetUserPlatformAndDM(user.UserID)
-		if err != nil {
-			slog.Error("Error getting platform", "user_id", user.UserID, "error", err.Error())
-			continue
-		}
-		if platform == "" {
-			slog.Debug("Skipping user with no platform set", "user_id", user.UserID)
-			continue
-		}
-		errors, err := bot.storage.GetShiftErrors(user.UserID)
-		if err != nil {
-			slog.Error("Error getting shift errors", "user_id", user.UserID, "error", err.Error())
-			continue
-		}
-		if len(errors) > 4 {
-			if dm {
-				str := "It seems like the last 5 code attempts I tried for you returned errors...\n" +
-					"Your user credentials might be expired?\n\n" +
-					"Maybe try logging in again with `/login`, but if this continues, please reach out on the [Official Discord Server](" + ServerLink + ")"
-				err = bot.DMUser(user.UserID, str)
-				if err != nil {
-					slog.Error("Failed to DM user", "user_id", user.UserID, "error", err.Error())
-				} else {
-					slog.Info("DMed user for >4 sequential shift errors", "user_id", user.UserID)
-				}
-			}
-			continue
-		}
-		codes, err := bot.storage.GetValidCodesNotRedeemedForUser(user.UserID, platform, 10)
-		if err != nil {
-			slog.Error("Error getting codes", "error", err.Error())
-			continue
-		}
-		slog.Debug("Retrieved unredeemed codes", "user_id", user.UserID, "codes", len(codes))
+		bot.redeemCodesForUser(user)
+	}
+}
 
-		client, err := shift.NewClient(user.Cookies)
-		if err != nil {
-			slog.Error("Error creating shift client", "user_id", user.UserID, "error", err.Error())
-			continue
+// redeemCodesForUser redeems any valid codes the user hasn't redeemed yet. Panics are recovered and logged, so one user
+// can't stop processing for everyone else (or crash the bot)
+func (bot *Bot) redeemCodesForUser(user store.UserCookies) {
+	defer func() {
+		if r := recover(); r != nil {
+			slog.Error("Recovered from panic while redeeming codes for user", "user_id", user.UserID, "panic", r, "stack", string(debug.Stack()))
 		}
+	}()
 
-		for _, code := range codes {
-			reward, status, err := bot.redeemCode(client, user, code, shift.Platform(platform))
-			success := status == shift.SUCCESS
+	platform, dm, err := bot.storage.GetUserPlatformAndDM(user.UserID)
+	if err != nil {
+		slog.Error("Error getting platform", "user_id", user.UserID, "error", err.Error())
+		return
+	}
+	if platform == "" {
+		slog.Debug("Skipping user with no platform set", "user_id", user.UserID)
+		return
+	}
+	errors, err := bot.storage.GetShiftErrors(user.UserID)
+	if err != nil {
+		slog.Error("Error getting shift errors", "user_id", user.UserID, "error", err.Error())
+		return
+	}
+	if len(errors) > 4 {
+		if dm {
+			str := "It seems like the last 5 code attempts I tried for you returned errors...\n" +
+				"Your user credentials might be expired?\n\n" +
+				"Maybe try logging in again with `/login`, but if this continues, please reach out on the [Official Discord Server](" + ServerLink + ")"
+			err = bot.DMUser(user.UserID, str)
 			if err != nil {
-				slog.Error("Error redeeming code", "user_id", user.UserID, "code", code, "platform", platform, "error", err.Error())
-				err2 := bot.storage.AddShiftError(user.UserID, code, platform, err.Error())
-				if err2 != nil {
-					slog.Error("Error adding shift error to db", "user_id", user.UserID, "code", code, "platform", platform, "error", err2.Error())
-				}
+				slog.Error("Failed to DM user", "user_id", user.UserID, "error", err.Error())
 			} else {
-				// if no error was reported, then clear errors for this user
-				// (for now, we treat them as only important if they're sequential)
-				err = bot.storage.ClearShiftErrors(user.UserID)
+				slog.Info("DMed user for >4 sequential shift errors", "user_id", user.UserID)
+			}
+		}
+		return
+	}
+	codes, err := bot.storage.GetValidCodesNotRedeemedForUser(user.UserID, platform, 10)
+	if err != nil {
+		slog.Error("Error getting codes", "error", err.Error())
+		return
+	}
+	slog.Debug("Retrieved unredeemed codes", "user_id", user.UserID, "codes", len(codes))
+
+	client, err := shift.NewClient(user.Cookies)
+	if err != nil {
+		slog.Error("Error creating shift client", "user_id", user.UserID, "error", err.Error())
+		return
+	}
+
+	for _, code := range codes {
+		reward, status, err := bot.redeemCode(client, user, code, shift.Platform(platform))
+		success := status == shift.SUCCESS
+		if err != nil {
+			slog.Error("Error redeeming code", "user_id", user.UserID, "code", code, "platform", platform, "error", err.Error())
+			err2 := bot.storage.AddShiftError(user.UserID, code, platform, err.Error())
+			if err2 != nil {
+				slog.Error("Error adding shift error to db", "user_id", user.UserID, "code", code, "platform", platform, "error", err2.Error())
+			}
+		} else {
+			// if no error was reported, then clear errors for this user
+			// (for now, we treat them as only important if they're sequential)
+			err = bot.storage.ClearShiftErrors(user.UserID)
+			if err != nil {
+				slog.Error("Error clearing shift errors from db", "user_id", user.UserID, "error", err.Error())
+			}
+			if reward != nil {
+				set, err := bot.storage.SetCodeRewardAndSuccess(code, reward.Title, success)
 				if err != nil {
-					slog.Error("Error clearing shift errors from db", "user_id", user.UserID, "error", err.Error())
-				}
-				if reward != nil {
-					set, err := bot.storage.SetCodeRewardAndSuccess(code, reward.Title, success)
-					if err != nil {
-						slog.Error("Error setting code reward", "code", code, "reward", reward.Title, "error", err.Error())
-					} else if set {
-						slog.Info("Set reward", "code", code, "reward", reward.Title)
-					}
+					slog.Error("Error setting code reward", "code", code, "reward", reward.Title, "error", err.Error())
+				} else if set {
+					slog.Info("Set reward", "code", code, "reward", reward.Title)
 				}
 			}
-			if success && dm {
-				str := Cheer + " I successfully redeemed `" + code + "` for you! " + Cheer + "\n\n"
-				if reward != nil {
-					str += "Looks like the prize was: `" + reward.Title + "`\n"
-				}
-				err = bot.DMUser(user.UserID, str)
-				if err != nil {
-					slog.Error("Error DMing user", "user_id", user.UserID, "error", err.Error())
-				} else {
-					slog.Info("DMed user", "user_id", user.UserID)
-				}
+		}
+		if success && dm {
+			str := Cheer + " I successfully redeemed `" + code + "` for you! " + Cheer + "\n\n"
+			if reward != nil {
+				str += "Looks like the prize was: `" + reward.Title + "`\n"
+			}
+			err = bot.DMUser(user.UserID, str)
+			if err != nil {
+				slog.Error("Error DMing user", "user_id", user.UserID, "error", err.Error())
+			} else {
+				slog.Info("DMed user", "user_id", user.UserID)
 			}
 		}
 	}
 }
 
+// shiftClient is the subset of *shift.Client used to redeem codes
+type shiftClient interface {
+	CheckRewards(platform shift.Platform, game shift.Game, limit int) ([]shift.Reward, error)
+	RedeemCode(code string, platform shift.Platform) (string, error)
+}
+
 // redeemCode redeems a code for a user, and attempts to determine what "reward" was indicated by the redemption
-func (bot *Bot) redeemCode(client *shift.Client, user store.UserCookies, code string, platform shift.Platform) (reward *shift.Reward, status string, err error) {
+func (bot *Bot) redeemCode(client shiftClient, user store.UserCookies, code string, platform shift.Platform) (reward *shift.Reward, status string, err error) {
 	rewards, err := client.CheckRewards(platform, shift.Borderlands4, -1)
 	if err != nil {
 		return nil, "", err
@@ -171,11 +190,16 @@ func (bot *Bot) redeemCode(client *shift.Client, user store.UserCookies, code st
 
 	// only check the reward if we successfully redeemed. Code above handles if we got an error response, but the rewards increased
 	if status == shift.SUCCESS {
+		// the code was redeemed regardless, so a failed or empty rewards lookup only means we can't report the reward.
+		// Don't return an error; that would skip recording the redemption, and count as a failure towards the user's errors
 		newRewards, err2 := client.CheckRewards(platform, shift.Borderlands4, 1)
 		if err2 != nil {
-			return nil, status, err2
+			slog.Warn("Code redemption succeeded, but failed to check rewards", "user_id", user.UserID, "code", code, "platform", platform, "error", err2.Error())
+		} else if len(newRewards) > 0 {
+			reward = &newRewards[0]
+		} else {
+			slog.Warn("Code redemption succeeded, but no rewards were listed", "user_id", user.UserID, "code", code, "platform", platform)
 		}
-		reward = &newRewards[0]
 	}
 
 	err = bot.storage.AddRedemption(user.UserID, code, string(platform), status)

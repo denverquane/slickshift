@@ -320,11 +320,16 @@ func (client *Client) CheckRewards(platform Platform, game Game, limit int) ([]R
 	if err != nil {
 		return nil, err
 	}
+	return parseRewards(doc, platform, game, limit), nil
+}
 
+// parseRewards returns the rewards listed for the platform and game on the SHiFT rewards page, newest first.
+// If limit is > 0, at most limit rewards are returned
+func parseRewards(doc *goquery.Document, platform Platform, game Game, limit int) []Reward {
 	var rewards []Reward
 	currentGame := ""
 	selector := fmt.Sprintf("div.tab-pane.well#%s div.sh_reward_list", string(platform))
-	doc.Find(selector).Children().Each(func(i int, s *goquery.Selection) {
+	doc.Find(selector).Children().EachWithBreak(func(i int, s *goquery.Selection) bool {
 		if s.HasClass("shift-secondary-title") {
 			// Update current game context
 			currentGame = strings.TrimSpace(s.Find("h2").Text())
@@ -342,9 +347,10 @@ func (client *Client) CheckRewards(platform Platform, game Game, limit int) ([]R
 				Description: description,
 			})
 			if limit > 0 && len(rewards) == limit {
-				return
+				return false
 			}
 		}
+		return true
 	})
-	return rewards, nil
+	return rewards
 }
