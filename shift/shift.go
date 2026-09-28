@@ -293,7 +293,7 @@ func (client *Client) RedeemCode(code string, platform Platform) (string, error)
 		}
 	}
 
-	return "", nil
+	return "", fmt.Errorf("unexpected response when redeeming code (status: %d)", resp.StatusCode)
 }
 
 func commitMessage(platform Platform) string {

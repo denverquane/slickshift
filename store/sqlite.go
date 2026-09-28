@@ -140,7 +140,42 @@ func (s *Sqlite) EncryptAndSetUserCookies(userID string, cookies []*http.Cookie)
 		return err
 	}
 	t := time.Now().Unix()
-	_, err = s.db.Exec("INSERT INTO user_cookies (user_id, encrypted_cookie_json, updated_unix) VALUES (?, ?, ?) ON CONFLICT (user_id) DO UPDATE SET encrypted_cookie_json = excluded.encrypted_cookie_json, updated_unix = excluded.updated_unix", userID, encrypted, t)
+	// cookies are verified as logged in before they're set, so mark them as verified too
+	_, err = s.db.Exec("INSERT INTO user_cookies (user_id, encrypted_cookie_json, updated_unix, verified_unix) VALUES (?, ?, ?, ?) ON CONFLICT (user_id) DO UPDATE SET encrypted_cookie_json = excluded.encrypted_cookie_json, updated_unix = excluded.updated_unix, verified_unix = excluded.verified_unix", userID, encrypted, t, t)
+	return err
+}
+
+func (s *Sqlite) SetUserCookiesVerified(userID string) error {
+	t := time.Now().Unix()
+	_, err := s.db.Exec("UPDATE user_cookies SET verified_unix = ? WHERE user_id = ?", t, userID)
+	return err
+}
+
+func (s *Sqlite) GetUserAlert(userID string) (string, error) {
+	var alert sql.NullString
+	err := s.db.QueryRow("SELECT alert FROM users WHERE id = ?", userID).Scan(&alert)
+	if err != nil {
+		return "", err
+	}
+	return alert.String, nil
+}
+
+// SetUserAlert sets the user's alert, and returns true if it changed (meaning the user hasn't been notified about it yet)
+func (s *Sqlite) SetUserAlert(userID, alert string) (bool, error) {
+	t := time.Now().Unix()
+	res, err := s.db.Exec("UPDATE users SET alert = ?, alert_unix = ? WHERE id = ? AND alert IS NOT ?", alert, t, userID, alert)
+	if err != nil {
+		return false, err
+	}
+	n, err := res.RowsAffected()
+	if err != nil {
+		return false, err
+	}
+	return n == 1, nil
+}
+
+func (s *Sqlite) ClearUserAlert(userID string) error {
+	_, err := s.db.Exec("UPDATE users SET alert = NULL, alert_unix = NULL WHERE id = ? AND alert IS NOT NULL", userID)
 	return err
 }
 
@@ -241,11 +276,28 @@ func (s *Sqlite) GetAllDecryptedUserCookiesSorted(limit int64) ([]UserCookies, e
 		return nil, err
 	}
 	defer rows.Close()
+	return s.scanDecryptedUserCookies(rows)
+}
+
+// GetDecryptedUserCookiesToVerify returns cookies for users with a platform set, whose sessions haven't been verified as
+// logged in since the provided time (and aren't already known to be expired), least recently verified first
+func (s *Sqlite) GetDecryptedUserCookiesToVerify(verifiedBefore int64, limit int64) ([]UserCookies, error) {
+	rows, err := s.db.Query("SELECT c.user_id, c.encrypted_cookie_json FROM user_cookies c JOIN users u ON c.user_id = u.id "+
+		"WHERE (c.verified_unix IS NULL OR c.verified_unix < ?) AND u.platform IS NOT NULL AND u.platform != '' AND u.alert IS NOT ? "+
+		"ORDER BY c.verified_unix LIMIT ?", verifiedBefore, AlertSessionExpired, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	return s.scanDecryptedUserCookies(rows)
+}
+
+func (s *Sqlite) scanDecryptedUserCookies(rows *sql.Rows) ([]UserCookies, error) {
 	var userCookies []UserCookies
 	for rows.Next() {
 		var userID string
 		var cipherText string
-		err = rows.Scan(&userID, &cipherText)
+		err := rows.Scan(&userID, &cipherText)
 		if err != nil {
 			return nil, err
 		}
@@ -314,8 +366,8 @@ func (s *Sqlite) RedemptionSummaryForUser(userID string) (map[string]int64, erro
 		userID, shift.ALREADY_REDEEMED,
 	).Scan(
 		&total,
-		&already,
 		&success,
+		&already,
 	)
 	if err != nil {
 		return nil, err

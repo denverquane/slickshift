@@ -36,9 +36,16 @@ var defaultHeaders = http.Header{
 	"Upgrade-Insecure-Requests": []string{"1"},
 }
 
+// ErrNotLoggedIn is returned when SHiFT redirects to the sign-in page, which means the session cookies are expired/invalid
+var ErrNotLoggedIn = errors.New("not logged in to SHiFT (session expired or invalid)")
+
 func readAsHTML(resp http.Response) (*goquery.Document, error) {
 	defer resp.Body.Close()
 
+	// pages that require a session redirect to the sign-in page (like /home?redirect_to=...) when not logged in
+	if resp.StatusCode == http.StatusFound && strings.HasPrefix(resp.Header.Get("Location"), HOME) {
+		return nil, ErrNotLoggedIn
+	}
 	if resp.StatusCode != 200 {
 		return nil, errors.New("invalid response code")
 	}

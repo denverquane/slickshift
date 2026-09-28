@@ -27,18 +27,30 @@ type Statistics struct {
 
 const DiscordSource = "discord"
 
+// alerts that users are notified about once (until they're resolved), rather than on every redemption loop
+const (
+	AlertSessionExpired = "session_expired"
+	AlertLink2KAccount  = "link_2k_account"
+	AlertShiftErrors    = "shift_errors"
+)
+
 type Store interface {
 	UserExists(userID string) bool
 	AddUser(userID string) error
 	GetUserPlatformAndDM(userID string) (string, bool, error)
 	SetUserPlatform(userID, platform string) error
 	SetUserDM(userID string, dm bool) error
+	GetUserAlert(userID string) (string, error)
+	SetUserAlert(userID, alert string) (bool, error)
+	ClearUserAlert(userID string) error
 
 	UserCookiesExists(userID string) bool
 	EncryptAndSetUserCookies(userID string, cookie []*http.Cookie) error
+	SetUserCookiesVerified(userID string) error
 	GetDecryptedUserCookies(userID string) ([]*http.Cookie, error)
 	DeleteUserCookies(userID string) error
 	GetAllDecryptedUserCookiesSorted(limit int64) ([]UserCookies, error)
+	GetDecryptedUserCookiesToVerify(verifiedBefore int64, limit int64) ([]UserCookies, error)
 
 	CodeExists(code string) bool
 	AddCode(code, game string, userID *string, source *string) error

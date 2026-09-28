@@ -3,8 +3,10 @@ package bot
 import (
 	"log"
 	"log/slog"
+	"net/http"
 	"strings"
 
+	"github.com/denverquane/slickshift/shift"
 	"github.com/denverquane/slickshift/store"
 
 	"github.com/bwmarrin/discordgo"
@@ -32,6 +34,7 @@ type Bot struct {
 	redemptionTrigger chan string
 	version           string
 	commit            string
+	newShiftClient    func(cookies []*http.Cookie) (shiftClient, error)
 }
 
 func CreateNewBot(token string, storage store.Store, version, commit string) (*Bot, error) {
@@ -46,6 +49,9 @@ func CreateNewBot(token string, storage store.Store, version, commit string) (*B
 		redemptionTrigger: make(chan string, 10),
 		version:           version,
 		commit:            commit,
+		newShiftClient: func(cookies []*http.Cookie) (shiftClient, error) {
+			return shift.NewClient(cookies)
+		},
 	}, nil
 }
 

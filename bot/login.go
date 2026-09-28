@@ -39,6 +39,10 @@ func (bot *Bot) loginCookieResponse(userID string, s *discordgo.Session, i *disc
 	if err != nil {
 		slog.Error("Couldn't clear shift_errors for user", "user_id", userID, "error", err.Error())
 	}
+	err = bot.storage.ClearUserAlert(userID)
+	if err != nil {
+		slog.Error("Couldn't clear alert for user", "user_id", userID, "error", err.Error())
+	}
 	bot.triggerRedemptionProcessing(userID)
 	return privateMessageResponse(Cheer + " Success! " + Cheer + "\n\nI've securely stored your session cookies for automatic SHiFT code redemption!")
 }
