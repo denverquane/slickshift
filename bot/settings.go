@@ -2,7 +2,7 @@ package bot
 
 import (
 	"github.com/bwmarrin/discordgo"
-	"log"
+	"log/slog"
 )
 
 const settingsSuffix = "* Do you want me to message you when I redeem codes for you, or when your login details expire?\n" +
@@ -11,7 +11,7 @@ const settingsSuffix = "* Do you want me to message you when I redeem codes for 
 func (bot *Bot) settingsResponse(userID string, s *discordgo.Session, i *discordgo.InteractionCreate) *discordgo.InteractionResponse {
 	platform, shouldDM, err := bot.storage.GetUserPlatformAndDM(userID)
 	if err != nil {
-		log.Println(err)
+		slog.Error("Error getting platform", "user_id", userID, "error", err.Error())
 		return privateMessageResponse("Hm, I got an error fetching your platform. Please try again later.")
 	}
 	msg := privateMessageResponse(settingsSuffix)

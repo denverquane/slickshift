@@ -4,11 +4,9 @@ import (
 	"context"
 	"database/sql"
 	"embed"
-	_ "embed"
 	"encoding/json"
 	"fmt"
 	"io/fs"
-	"log"
 	"log/slog"
 	"net/http"
 	"strconv"
@@ -29,11 +27,10 @@ type Sqlite struct {
 }
 
 func NewSqliteStore(filepath string, encryptor *Encryptor) (Store, error) {
-	db, err := sql.Open("sqlite", filepath)
-	if err != nil {
-		return nil, err
-	}
-	_, err = db.Exec("PRAGMA foreign_keys = ON")
+	// pragmas are per-connection, so they're set in the DSN to apply to every connection in the pool:
+	// foreign_keys enforces foreign keys (and their cascades), and busy_timeout waits for locks (instead of immediately
+	// failing with "database is locked") when the bot, API, and redemption processing write concurrently
+	db, err := sql.Open("sqlite", filepath+"?_pragma=foreign_keys(1)&_pragma=busy_timeout(5000)")
 	if err != nil {
 		return nil, err
 	}
@@ -246,14 +243,14 @@ func (s *Sqlite) SetCodeRewardAndSuccess(code, reward string, success bool) (boo
 
 func (s *Sqlite) GetValidCodesNotRedeemedForUser(userID, platform string, limit int) ([]string, error) {
 	// grab codes that the user hasn't redeemed for the platform before,
-	// AND, if the code hasn't been marked as expired/invalid before
+	// AND, if the code hasn't been marked as expired/invalid/for another game before
 
 	// TODO maybe have a minimum threshold on how many expiries have to be marked before we ignore?
 	query := "SELECT sc.code FROM shift_codes sc WHERE " +
 		"NOT EXISTS (SELECT 1 FROM redemptions r WHERE r.code = sc.code AND r.user_id = ? AND r.platform = ?) AND " +
-		"NOT EXISTS (SELECT 1 FROM redemptions r WHERE r.code = sc.code AND (r.status = ? OR r.status = ?)) " +
+		"NOT EXISTS (SELECT 1 FROM redemptions r WHERE r.code = sc.code AND r.status IN (?, ?, ?)) " +
 		"ORDER BY success_unix DESC LIMIT ?" // sort preferentially for the most recently-successful codes
-	rows, err := s.db.Query(query, userID, platform, shift.EXPIRED, shift.NOT_EXIST, limit)
+	rows, err := s.db.Query(query, userID, platform, shift.EXPIRED, shift.NOT_EXIST, shift.WRONG_GAME, limit)
 	if err != nil {
 		return nil, err
 	}
@@ -507,7 +504,7 @@ func (s *Sqlite) exists(table, field, value string) bool {
 	var exists bool
 	err := s.db.QueryRow(query, value).Scan(&exists)
 	if err != nil {
-		log.Println(err)
+		slog.Error("Error checking if value exists", "table", table, "field", field, "error", err.Error())
 		return false
 	}
 	return exists

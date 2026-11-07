@@ -205,6 +205,28 @@ func TestRedeemCode_NonFinalResponsesAreNotRecorded(t *testing.T) {
 	}
 }
 
+// A code for another game is a final outcome, so it's recorded (which stops it being tried for anyone else)
+func TestRedeemCode_WrongGameIsRecorded(t *testing.T) {
+	// arrange
+	st := &fakeStore{}
+	bot := &Bot{storage: st}
+	client := &fakeShiftClient{status: shift.WRONG_GAME}
+
+	// act
+	reward, status, err := bot.redeemCode(client, testUser, testCode, shift.Steam)
+
+	// assert
+	if err != nil {
+		t.Fatalf("Expected no error, got %v", err)
+	}
+	if status != shift.WRONG_GAME || reward != nil {
+		t.Errorf("Expected status %q with no reward, got %q, %+v", shift.WRONG_GAME, status, reward)
+	}
+	if len(st.redemptions) != 1 || st.redemptions[0] != shift.WRONG_GAME {
+		t.Errorf("Wrong game should be recorded, got %v", st.redemptions)
+	}
+}
+
 func TestUserRedemptionLoop_RecoversFromPanicForOneUser(t *testing.T) {
 	// arrange
 	st := &panickingStore{
@@ -238,7 +260,8 @@ func newTestBot(t *testing.T, client *fakeShiftClient) (*Bot, store.Store) {
 		st.Close()
 	})
 	bot := &Bot{
-		storage: st,
+		storage:           st,
+		redemptionTrigger: make(chan string, 10),
 		newShiftClient: func(cookies []*http.Cookie) (shiftClient, error) {
 			return client, nil
 		},

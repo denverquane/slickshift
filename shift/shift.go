@@ -5,7 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"log"
+	"log/slog"
 	"net/http"
 	"net/url"
 	"strings"
@@ -40,11 +40,33 @@ func ToPretty(p Platform) string {
 	return ""
 }
 
-//type Title string
-//
-//const (
-//	BL4 Title = "oak2"
-//)
+// BL4Title is how SHiFT's redemption forms identify Borderlands 4
+const BL4Title = "oak2"
+
+// findRedemptionForm returns the code's Borderlands 4 redemption form, preferring the one for the platform (SHiFT can
+// list a form per game and platform). It's nil if none are for Borderlands 4. titles lists every game the forms are for
+func findRedemptionForm(doc *goquery.Document, platform Platform) (form *goquery.Selection, titles []string) {
+	forms := doc.Find("form")
+	if forms.Length() == 0 {
+		// no form elements, so treat the whole response as one form
+		forms = doc.Selection
+	}
+	forms.Each(func(_ int, s *goquery.Selection) {
+		title, exists := s.Find("input[name='archway_code_redemption[title]']").Attr("value")
+		if !exists {
+			return
+		}
+		titles = append(titles, title)
+		if title != BL4Title {
+			return
+		}
+		service, _ := s.Find("input[name='archway_code_redemption[service]']").Attr("value")
+		if form == nil || service == string(platform) {
+			form = s
+		}
+	})
+	return form, titles
+}
 
 type Game string
 
@@ -215,19 +237,24 @@ func (client *Client) RedeemCode(code string, platform Platform) (string, error)
 		if respType != Unrecognized {
 			return text, nil
 		} else {
-			log.Println("Undetected response message when authenticity token is not found:")
-			log.Println(text)
+			slog.Warn("Unrecognized response message when authenticity token is not found", "code", code, "text", text)
 		}
 		return "", errors.New("failed to find authenticity token in code redemption form")
 	}
-	check, exists := doc.Find("input[name='archway_code_redemption[check]']").Attr("value")
+	form, titles := findRedemptionForm(doc, platform)
+	if len(titles) == 0 {
+		return "", errors.New("failed to find archway_code_redemption[title] in form")
+	}
+	if form == nil {
+		slog.Warn("Code isn't for Borderlands 4, so it won't be redeemed", "code", code, "titles", titles)
+		return WRONG_GAME, nil
+	}
+	if token, ok := form.Find("input[name='authenticity_token']").Attr("value"); ok {
+		csrfToken = token
+	}
+	check, exists := form.Find("input[name='archway_code_redemption[check]']").Attr("value")
 	if !exists {
 		return "", errors.New("failed to find archway_code_redemption[check] in form")
-	}
-
-	game, exists := doc.Find("input[name='archway_code_redemption[title]']").Attr("value")
-	if !exists {
-		return "", errors.New("failed to find archway_code_redemption[title] in form")
 	}
 
 	time.Sleep(1 * time.Second)
@@ -239,7 +266,7 @@ func (client *Client) RedeemCode(code string, platform Platform) (string, error)
 	formValues.Set("archway_code_redemption[code]", code)
 	formValues.Set("archway_code_redemption[service]", string(platform))
 	formValues.Set("archway_code_redemption[check]", check)
-	formValues.Set("archway_code_redemption[title]", game)
+	formValues.Set("archway_code_redemption[title]", BL4Title)
 	// TODO how does this work for other platforms besides Steam/PSN
 	formValues.Set("commit", commitMessage(platform))
 
@@ -276,18 +303,15 @@ func (client *Client) RedeemCode(code string, platform Platform) (string, error)
 			if err != nil {
 				return "", err
 			}
-			//log.Println(js)
-			if text, ok := js["text"]; ok {
-				respType := DetermineResponseType(text.(string))
-				if respType != Unrecognized {
-					return text.(string), nil
-				} else {
-					log.Println("Undetected response message after posting code redemption")
-					log.Println(text.(string))
+			// check the type too, so an unexpected json response can't panic
+			if text, ok := js["text"].(string); ok {
+				respType := DetermineResponseType(text)
+				if respType == Unrecognized {
+					slog.Warn("Unrecognized response message after posting code redemption", "code", code, "text", text)
 				}
-				return text.(string), nil
+				return text, nil
 			} else {
-				log.Println(js)
+				slog.Error("Unexpected json response after posting code redemption", "code", code, "json", js)
 				return "", errors.New("failed to read json text status returned from code redemption")
 			}
 		}

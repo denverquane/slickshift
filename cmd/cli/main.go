@@ -2,11 +2,18 @@ package main
 
 import (
 	"flag"
-	"log"
+	"log/slog"
+	"os"
 
 	"github.com/denverquane/slickshift/data"
 	"github.com/denverquane/slickshift/shift"
 )
+
+// fatal logs the error and exits
+func fatal(msg string, args ...any) {
+	slog.Error(msg, args...)
+	os.Exit(1)
+}
 
 func main() {
 	var email string
@@ -16,47 +23,47 @@ func main() {
 	flag.Parse()
 
 	if email == "" {
-		log.Fatal("-email is required")
+		fatal("-email is required")
 	}
 
 	if password == "" {
-		log.Fatal("-password is required")
+		fatal("-password is required")
 	}
 
-	log.Println(data.DefaultBL4Codes())
+	slog.Info("Default codes", "codes", data.DefaultBL4Codes())
 
 	c, err := shift.NewClient(nil)
 	if err != nil {
-		log.Fatal(err)
+		fatal("Error creating client", "error", err.Error())
 	}
 
 	err = c.Login(email, password)
 	if err != nil {
-		log.Fatal(err)
+		fatal("Error logging in", "error", err.Error())
 	}
 
 	cookies := c.DumpCookies()
 	if len(cookies) == 0 {
-		log.Fatal("No cookies returned")
+		fatal("No cookies returned")
 	}
 
 	// remake the client so we can verify that simply copying over the cookies will suffice
 	c, err = shift.NewClient(cookies)
 	if err != nil {
-		log.Fatal(err)
+		fatal("Error creating client with cookies", "error", err.Error())
 	}
 
 	codes := data.DefaultBL4Codes()
 	for code := range codes {
 		status, err := c.RedeemCode(code, shift.Steam)
 		if err != nil {
-			log.Println("Couldn't redeem code with error:", err)
+			slog.Error("Couldn't redeem code", "code", code, "error", err.Error())
 		}
 		statusCode := shift.DetermineResponseType(status)
 		if statusCode == shift.Success {
-			log.Printf("Redeemed %s successfully\n", code)
+			slog.Info("Redeemed code successfully", "code", code)
 		} else {
-			log.Printf("Redeemed %s failed with status: \"%s\"\n", code, status)
+			slog.Info("Redeeming code failed", "code", code, "status", status)
 		}
 	}
 

@@ -1,18 +1,45 @@
 package bot
 
 import (
+	"crypto/subtle"
 	"log/slog"
 	"net/http"
 	"strconv"
+	"strings"
 
 	"github.com/denverquane/slickshift/shift"
 	"github.com/gin-gonic/gin"
 )
 
-func (bot *Bot) StartAPIServer(port string) {
+// StartAPIServer serves the API on the port. If apiKey is set, endpoints that modify data or return user data require it
+func (bot *Bot) StartAPIServer(port, apiKey string) {
+	err := bot.apiRouter(apiKey).Run(":" + port)
+	if err != nil {
+		slog.Error("API server stopped", "error", err.Error())
+	}
+}
+
+// requireAPIKey rejects requests without the API key as a bearer token (like "Authorization: Bearer <key>").
+// If apiKey is empty, all requests are allowed
+func requireAPIKey(apiKey string) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		if apiKey == "" {
+			c.Next()
+			return
+		}
+		token, ok := strings.CutPrefix(c.GetHeader("Authorization"), "Bearer ")
+		if !ok || subtle.ConstantTimeCompare([]byte(token), []byte(apiKey)) != 1 {
+			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"message": "missing or invalid API key"})
+			return
+		}
+		c.Next()
+	}
+}
+
+func (bot *Bot) apiRouter(apiKey string) *gin.Engine {
 	r := gin.Default()
 
-	codes := r.Group("/codes")
+	codes := r.Group("/codes", requireAPIKey(apiKey))
 	{
 		codes.POST("/:code", func(c *gin.Context) {
 			code := c.Param("code")
@@ -48,7 +75,7 @@ func (bot *Bot) StartAPIServer(port string) {
 			c.JSON(http.StatusCreated, gin.H{"code": code, "game": game, "source": source})
 		})
 	}
-	redemptions := r.Group("/redemptions")
+	redemptions := r.Group("/redemptions", requireAPIKey(apiKey))
 	{
 		redemptions.GET("/:user_id", func(c *gin.Context) {
 			userID := c.Param("user_id")
@@ -77,6 +104,7 @@ func (bot *Bot) StartAPIServer(port string) {
 			c.JSON(http.StatusOK, gin.H{"redemptions": redems})
 		})
 	}
+	// statistics are already public through the /info command, so they don't require the API key
 	info := r.Group("/info")
 	{
 		info.GET("", func(c *gin.Context) {
@@ -93,5 +121,5 @@ func (bot *Bot) StartAPIServer(port string) {
 		c.JSON(http.StatusOK, "Hello, World!")
 	})
 
-	r.Run(":" + port)
+	return r
 }

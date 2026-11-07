@@ -64,7 +64,7 @@ func (bot *Bot) redemptionsResponse(userID string, session *discordgo.Session, i
 			color = DarkOrange
 		case shift.LINK2K:
 			color = Yellow
-		case shift.NOT_EXIST, shift.EXPIRED:
+		case shift.NOT_EXIST, shift.EXPIRED, shift.WRONG_GAME:
 			color = Red
 		}
 		embeds = append(embeds, &discordgo.MessageEmbed{

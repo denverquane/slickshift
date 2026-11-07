@@ -1,7 +1,7 @@
 package bot
 
 import (
-	"log"
+	"log/slog"
 
 	"github.com/bwmarrin/discordgo"
 	"github.com/denverquane/slickshift/shift"
@@ -21,7 +21,7 @@ func (bot *Bot) addResponse(userID string, s *discordgo.Session, i *discordgo.In
 	var src = store.DiscordSource
 	err := bot.storage.AddCode(code, string(shift.Borderlands4), &userID, &src)
 	if err != nil {
-		log.Println(err)
+		slog.Error("Error adding code", "user_id", userID, "code", code, "error", err.Error())
 		return nil
 	}
 	// trigger reprocessing for this user first, then trigger for other users as well

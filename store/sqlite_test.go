@@ -1,9 +1,9 @@
 package store
 
 import (
+	"context"
 	"crypto/rand"
 	"database/sql"
-	"log"
 	"net/http"
 	"path/filepath"
 	"testing"
@@ -20,11 +20,11 @@ func newTestDB(t *testing.T) Store {
 	}
 	encryptor, err := NewEncryptor(key)
 	if err != nil {
-		log.Fatal(err)
+		t.Fatal(err)
 	}
 	store, err := NewSqliteStore(":memory:", encryptor)
 	if err != nil {
-		log.Fatal(err)
+		t.Fatal(err)
 	}
 
 	t.Cleanup(func() {
@@ -194,7 +194,7 @@ func TestNewSqliteStore_AddRedemptionAndGetSuccessStatus(t *testing.T) {
 
 }
 
-// when fetching codes for a user to redeem, if other users have marked the codes as expired or invalid, those
+// when fetching codes for a user to redeem, if other users have marked the codes as expired, invalid, or for another game, those
 // codes should not be retrieved
 func TestSqliteStore_GetValidCodes(t *testing.T) {
 	// arrange
@@ -205,6 +205,7 @@ func TestSqliteStore_GetValidCodes(t *testing.T) {
 	const goodCode = "ABCDEF"
 	const expiredCode = "BBBBB"
 	const notExistCode = "CCCCC"
+	const wrongGameCode = "DDDDD"
 
 	const platform = string(shift.Steam)
 	const game = string(shift.Borderlands4)
@@ -218,10 +219,12 @@ func TestSqliteStore_GetValidCodes(t *testing.T) {
 	st.AddCode(goodCode, game, nil, nil)
 	st.AddCode(expiredCode, game, nil, nil)
 	st.AddCode(notExistCode, game, nil, nil)
+	st.AddCode(wrongGameCode, game, nil, nil)
 
 	st.AddRedemption(userID, goodCode, platform, shift.SUCCESS)
 	st.AddRedemption(userID, expiredCode, platform, shift.EXPIRED)
 	st.AddRedemption(userID, notExistCode, platform, shift.NOT_EXIST)
+	st.AddRedemption(userID, wrongGameCode, platform, shift.WRONG_GAME)
 
 	// act
 	codes, err := st.GetValidCodesNotRedeemedForUser(testUserID, platform, 10)
@@ -440,8 +443,8 @@ func TestSqliteStore_GetDecryptedUserCookiesToVerify(t *testing.T) {
 	}
 }
 
-// Migration 3 removes redemptions that weren't final outcomes, so those codes get retried
-func TestSqliteStore_Migration3RemovesNonFinalRedemptions(t *testing.T) {
+// Migration 3 removes redemptions that weren't final outcomes (so those codes get retried), and assigns shift_errors ids
+func TestSqliteStore_Migration3(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "test.db")
 	db, err := sql.Open("sqlite", path)
 	if err != nil {
@@ -475,6 +478,13 @@ func TestSqliteStore_Migration3RemovesNonFinalRedemptions(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
+	// like AddShiftError did before migration 3, which left id NULL
+	for i := 0; i < 2; i++ {
+		_, err = db.Exec("INSERT INTO shift_errors (user_id, code, platform, error, created_unix) VALUES (1, 'AAAAA', ?, 'some error', ?)", shift.Steam, i)
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
 	db.Close()
 
 	key := make([]byte, 32)
@@ -501,5 +511,74 @@ func TestSqliteStore_Migration3RemovesNonFinalRedemptions(t *testing.T) {
 	}
 	if len(remaining) != 4 {
 		t.Errorf("Only the 4 final redemptions should be kept, got %+v", remaining)
+	}
+
+	errs, err := st.GetShiftErrors("1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(errs) != 2 {
+		t.Errorf("Shift errors should be kept, got %v", errs)
+	}
+	assertShiftErrorIDs(t, st, 2)
+}
+
+func assertShiftErrorIDs(t *testing.T, st Store, expected int) {
+	t.Helper()
+	var count, ids, distinct int
+	err := st.(*Sqlite).db.QueryRow("SELECT COUNT(*), COUNT(id), COUNT(DISTINCT id) FROM shift_errors").Scan(&count, &ids, &distinct)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if count != expected || ids != expected || distinct != expected {
+		t.Errorf("Expected %d shift errors with distinct ids, got %d errors, %d ids, %d distinct", expected, count, ids, distinct)
+	}
+}
+
+// Regression: shift_errors.id was INT PRIMARY KEY (not INTEGER), so ids were never assigned
+func TestSqliteStore_ShiftErrorsHaveIDs(t *testing.T) {
+	st := newTestDB(t)
+	st.AddUser("1")
+	st.AddCode("AAAAA", string(shift.Borderlands4), nil, nil)
+
+	for i := 0; i < 2; i++ {
+		err := st.AddShiftError("1", "AAAAA", string(shift.Steam), "some error")
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	assertShiftErrorIDs(t, st, 2)
+}
+
+// Regression: pragmas were only set on whichever pooled connection ran them, so foreign keys weren't always enforced
+func TestSqliteStore_PragmasApplyToEveryConnection(t *testing.T) {
+	st := newTestDB(t)
+	db := st.(*Sqlite).db
+	ctx := context.Background()
+
+	// hold multiple connections at once, so the pool has to open new ones
+	for i := 0; i < 3; i++ {
+		conn, err := db.Conn(ctx)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer conn.Close()
+
+		var foreignKeys, busyTimeout int
+		err = conn.QueryRowContext(ctx, "PRAGMA foreign_keys").Scan(&foreignKeys)
+		if err != nil {
+			t.Fatal(err)
+		}
+		err = conn.QueryRowContext(ctx, "PRAGMA busy_timeout").Scan(&busyTimeout)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if foreignKeys != 1 {
+			t.Errorf("Connection %d should enforce foreign keys", i)
+		}
+		if busyTimeout != 5000 {
+			t.Errorf("Connection %d busy_timeout should be 5000, got %d", i, busyTimeout)
+		}
 	}
 }

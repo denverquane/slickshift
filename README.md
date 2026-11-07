@@ -32,7 +32,7 @@ If you're just looking to use the Bot functionality, the easiest method is to [j
 
 But if you're looking to run/install the bot locally:
 
-Install Go 1.25+, then run `go build -o bot-exec cmd/server.go`. Then run the output `bot-exec` 
+Install Go 1.25+, then run `go build -o bot-exec ./cmd/bot`. Then run the output `bot-exec` 
 executable with the [Environment Variables](#environment-variables) specified below
 
 *TODO: Add Github workflow to generate executables automatically*
@@ -53,3 +53,4 @@ See [Environment Variables](#environment-variables) for required runtime informa
 | `REDEEM_INTERVAL`    | ❌ No     | `30` (minutes) | Interval (in minutes) between redemption attempts. Must be ≥ 1. (Adding codes or registering new users will always trigger the redemption loop, so this can be a high value) |
 | `DATABASE_FILE_PATH` | ❌ No     | `./sqlite.db` | Path to the SQLite database file. If not set, it defaults to a local file.                                                                                                   |
 | `API_SERVER_PORT`    | ❌ No     | `8080`        | Port that the API server will be accessible on.                                                                                                                              |
+| `API_KEY`            | ❌ No     | *None*        | If set, API requests that add codes or return user data must include the header `Authorization: Bearer <API_KEY>`. Strongly recommended if the API port is publicly reachable. Generate this with `openssl rand -base64 32` |

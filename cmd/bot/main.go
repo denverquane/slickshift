@@ -2,7 +2,6 @@ package main
 
 import (
 	"encoding/base64"
-	"log"
 	"log/slog"
 	"os"
 	"os/signal"
@@ -24,12 +23,19 @@ var (
 	Commit  string
 )
 
+// fatal logs the error and exits
+func fatal(msg string, args ...any) {
+	slog.Error(msg, args...)
+	os.Exit(1)
+}
+
 func main() {
 	secretKey := os.Getenv("ENCRYPTION_KEY_B64")
 	token := os.Getenv("DISCORD_BOT_TOKEN")
 	guildID := os.Getenv("DISCORD_GUILD_ID")
 	redeemInterval := os.Getenv("REDEEM_INTERVAL")
 	apiServerPort := os.Getenv("API_SERVER_PORT")
+	apiKey := os.Getenv("API_KEY")
 
 	if apiServerPort == "" {
 		apiServerPort = "8080"
@@ -37,7 +43,10 @@ func main() {
 	}
 	_, err := strconv.ParseInt(apiServerPort, 10, 64)
 	if err != nil {
-		log.Fatalf("Error parsing API_SERVER_PORT: %s", err.Error())
+		fatal("Error parsing API_SERVER_PORT", "error", err.Error())
+	}
+	if apiKey == "" {
+		slog.Warn("No API_KEY set, so API endpoints that add codes or return user data don't require authentication")
 	}
 
 	if redeemInterval == "" {
@@ -46,9 +55,9 @@ func main() {
 	}
 	redeemIntervalInt, err := strconv.Atoi(redeemInterval)
 	if err != nil {
-		log.Fatalf("Error parsing REDEEM_INTERVAL: %s", err.Error())
+		fatal("Error parsing REDEEM_INTERVAL", "error", err.Error())
 	} else if redeemIntervalInt < 1 {
-		log.Fatalf("REDEEM_INTERVAL cannot be less than 1")
+		fatal("REDEEM_INTERVAL cannot be less than 1")
 	}
 	dbFilePath := os.Getenv("DATABASE_FILE_PATH")
 	if dbFilePath == "" {
@@ -57,15 +66,15 @@ func main() {
 	}
 
 	if secretKey == "" {
-		log.Fatal("ENCRYPTION_KEY_B64 environment variable not set")
+		fatal("ENCRYPTION_KEY_B64 environment variable not set")
 	}
 	secretKeyBytes, err := base64.StdEncoding.DecodeString(secretKey)
 	if err != nil {
-		log.Fatal("Error decoding secret key", err.Error())
+		fatal("Error decoding secret key", "error", err.Error())
 	}
 
 	if token == "" {
-		log.Fatal("DISCORD_BOT_TOKEN environment variable not set")
+		fatal("DISCORD_BOT_TOKEN environment variable not set")
 	}
 
 	slog.Info("Environment: ",
@@ -75,18 +84,19 @@ func main() {
 		"REDEEM_INTERVAL", redeemIntervalInt,
 		"DISCORD_GUILD_ID", guildID,
 		"API_SERVER_PORT", apiServerPort,
+		"API_KEY", redactedIfSet(apiKey),
 		"DISCORD_BOT_TOKEN", "<redacted>",
 		"ENCRYPTION_KEY_B64", "<redacted>",
 	)
 
 	encryptor, err := store.NewEncryptor(secretKeyBytes)
 	if err != nil {
-		log.Fatal(err)
+		fatal("Error creating encryptor", "error", err.Error())
 	}
 
 	storage, err := store.NewSqliteStore(dbFilePath, encryptor)
 	if err != nil {
-		log.Fatal(err)
+		fatal("Error opening database", "path", dbFilePath, "error", err.Error())
 	}
 
 	// TODO more rigorous checks re: db file permissions here
@@ -105,18 +115,18 @@ func main() {
 
 	b, err := bot.CreateNewBot(token, storage, Version, Commit)
 	if err != nil {
-		log.Fatal(err)
+		fatal("Error creating bot", "error", err.Error())
 	}
 	err = b.Start()
 	if err != nil {
-		log.Fatal(err)
+		fatal("Error starting bot", "error", err.Error())
 	}
 
-	go b.StartAPIServer(apiServerPort)
+	go b.StartAPIServer(apiServerPort, apiKey)
 
-	cmds, err := b.RegisterCommands(guildID)
+	err = b.RegisterCommands(guildID)
 	if err != nil {
-		log.Fatal(err)
+		fatal("Error registering commands", "error", err.Error())
 	}
 
 	kill := make(chan bool, 1)
@@ -124,12 +134,18 @@ func main() {
 	go b.StartUserRedemptionProcessing(time.Minute*time.Duration(redeemIntervalInt), kill)
 
 	<-sc
-	log.Printf("Received Sigterm or Kill signal. Bot terminating after deleting commands")
+	slog.Info("Received Sigterm or Kill signal. Bot terminating")
 	kill <- true
 
-	b.DeleteCommands(guildID, cmds)
 	err = b.Stop()
 	if err != nil {
-		log.Fatal(err)
+		fatal("Error stopping bot", "error", err.Error())
 	}
+}
+
+func redactedIfSet(value string) string {
+	if value == "" {
+		return "<not set>"
+	}
+	return "<redacted>"
 }

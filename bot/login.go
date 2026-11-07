@@ -1,7 +1,6 @@
 package bot
 
 import (
-	"log"
 	"log/slog"
 	"strings"
 
@@ -22,17 +21,17 @@ func (bot *Bot) loginCookieResponse(userID string, s *discordgo.Session, i *disc
 	}
 	client, err := shift.NewClient(newCookies)
 	if err != nil {
-		log.Println(err)
+		slog.Error("Error creating shift client for login", "user_id", userID, "error", err.Error())
 		return privateMessageResponse("I encountered an error creating an HTTP client for login. Please try again later.")
 	}
 	_, err = client.CheckRewards(shift.Steam, shift.Borderlands4, 0)
 	if err != nil {
-		log.Println(err)
+		slog.Error("Error checking rewards with provided cookies", "user_id", userID, "error", err.Error())
 		return privateMessageResponse("I encountered an error fetching the SHiFT rewards website with your Cookie. Are you sure you copy/pasted it correctly?")
 	}
 	err = bot.storage.EncryptAndSetUserCookies(userID, newCookies)
 	if err != nil {
-		log.Println(err)
+		slog.Error("Error storing cookies", "user_id", userID, "error", err.Error())
 		return privateMessageResponse("I logged into SHiFT with your info, but I wasn't able to store your session cookies for later...")
 	}
 	err = bot.storage.ClearShiftErrors(userID)

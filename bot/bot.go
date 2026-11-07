@@ -1,7 +1,6 @@
 package bot
 
 import (
-	"log"
 	"log/slog"
 	"net/http"
 	"strings"
@@ -59,7 +58,7 @@ func (bot *Bot) Start() error {
 	bot.session.AddHandler(bot.handleSlashCommand)
 
 	bot.session.AddHandler(func(s *discordgo.Session, r *discordgo.Ready) {
-		log.Println("Bot is now online according to discord Ready handler")
+		slog.Info("Bot is now online according to discord Ready handler")
 	})
 	return bot.session.Open()
 }
@@ -70,14 +69,14 @@ func (bot *Bot) handleSlashCommand(s *discordgo.Session, i *discordgo.Interactio
 		if i.User != nil {
 			userID = i.User.ID
 		} else {
-			log.Println("Could not ascertain userID from i.Member.User nor i.User")
+			slog.Error("Could not ascertain userID from i.Member.User nor i.User")
 			return
 		}
 	} else {
 		userID = i.Member.User.ID
 	}
 	if userID == "" {
-		log.Println("User ID is empty")
+		slog.Error("User ID is empty")
 		return
 	}
 
@@ -85,7 +84,7 @@ func (bot *Bot) handleSlashCommand(s *discordgo.Session, i *discordgo.Interactio
 	if i.Type == discordgo.InteractionApplicationCommand && !exists {
 		err := s.InteractionRespond(i.Interaction, unregisteredUserResponse())
 		if err != nil {
-			log.Println(err)
+			slog.Error("Error responding to unregistered user", "user_id", userID, "error", err.Error())
 		}
 		return
 	}
@@ -94,7 +93,7 @@ func (bot *Bot) handleSlashCommand(s *discordgo.Session, i *discordgo.Interactio
 	if resp != nil {
 		err := s.InteractionRespond(i.Interaction, resp)
 		if err != nil {
-			log.Println(err)
+			slog.Error("Error responding to interaction", "user_id", userID, "error", err.Error())
 		}
 	}
 }
@@ -125,13 +124,13 @@ func (bot *Bot) getSlashResponse(userID string, s *discordgo.Session, i *discord
 		if !exists {
 			err := bot.storage.AddUser(userID)
 			if err != nil {
-				log.Println(err)
+				slog.Error("Error adding user", "user_id", userID, "error", err.Error())
 				return nil
 			}
 		}
 		oldPlatform, _, err := bot.storage.GetUserPlatformAndDM(userID)
 		if err != nil {
-			log.Println(err)
+			slog.Error("Error getting platform", "user_id", userID, "error", err.Error())
 			return nil
 		}
 		id := i.MessageComponentData().CustomID
@@ -140,7 +139,7 @@ func (bot *Bot) getSlashResponse(userID string, s *discordgo.Session, i *discord
 
 			err := bot.storage.SetUserPlatform(userID, platform)
 			if err != nil {
-				log.Println(err)
+				slog.Error("Error setting platform", "user_id", userID, "platform", platform, "error", err.Error())
 				return nil
 			}
 			// if they set the platform for the first time, or are a new user, then send a different response
@@ -168,7 +167,7 @@ func (bot *Bot) getSlashResponse(userID string, s *discordgo.Session, i *discord
 								"You'll need it enabled for whatever server(s) you and I are both members of."),
 						)
 						if err != nil {
-							log.Println(err)
+							slog.Error("Error responding to user about failed DM", "user_id", userID, "error", err.Error())
 						}
 					} else {
 						s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
@@ -186,7 +185,7 @@ func (bot *Bot) getSlashResponse(userID string, s *discordgo.Session, i *discord
 			if value == "true" {
 				err = bot.storage.DeleteUserCookies(userID)
 				if err != nil {
-					log.Println(err)
+					slog.Error("Error deleting cookies", "user_id", userID, "error", err.Error())
 					return privateMessageResponse("Hm, I had an issue deleting your cookies. Please try again later.")
 				}
 				msg := privateMessageResponse(ThumbsUp + " You've been successfully logged out!")
@@ -242,31 +241,27 @@ func (bot *Bot) DMUser(userID, content string) error {
 	return err
 }
 
-func (bot *Bot) RegisterCommands(guildID string) ([]*discordgo.ApplicationCommand, error) {
-	cmds := make([]*discordgo.ApplicationCommand, len(AllCommands))
-	for i, v := range AllCommands {
-		cmd, err := bot.session.ApplicationCommandCreate(bot.session.State.User.ID, guildID, v)
-		if err != nil {
-			return nil, err
-		}
-		slog.Info("Registered command", "command", v.Name)
-		cmds[i] = cmd
+// RegisterCommands replaces all the bot's commands with AllCommands. Commands aren't deleted on shutdown, so they stay
+// available to users while the bot restarts
+func (bot *Bot) RegisterCommands(guildID string) error {
+	cmds, err := bot.session.ApplicationCommandBulkOverwrite(bot.session.State.User.ID, guildID, AllCommands)
+	if err != nil {
+		return err
 	}
-	return cmds, nil
+	for _, cmd := range cmds {
+		slog.Info("Registered command", "command", cmd.Name)
+	}
+	return nil
 }
 
-func (bot *Bot) DeleteCommands(guildID string, cmds []*discordgo.ApplicationCommand) {
-	for _, v := range cmds {
-		err := bot.session.ApplicationCommandDelete(v.ApplicationID, guildID, v.ID)
-		if err != nil {
-			log.Printf("Error deleting %v: %v", v.Name, err)
-		}
-	}
-}
-
-// trigger redemption processing for whatever userID was provided. If empty, triggers for all users
+// trigger redemption processing for whatever userID was provided. If empty, triggers for all users.
+// Never blocks; if processing is already backed up, the trigger is dropped (the regular interval still covers it)
 func (bot *Bot) triggerRedemptionProcessing(userID string) {
-	bot.redemptionTrigger <- userID
+	select {
+	case bot.redemptionTrigger <- userID:
+	default:
+		slog.Warn("Redemption processing trigger dropped, because processing is backed up", "user_id", userID)
+	}
 }
 
 func (bot *Bot) Stop() error {
